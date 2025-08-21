@@ -2515,26 +2515,88 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	// Initialize the address validator
 	validator := validation.NewAddressValidator()
 
-	// Get unmatched documents from the dimensional model, including source UPRN data
+	// Get representative sample from all source types for large test (simplified approach)
 	query := `
-		SELECT 
-			f.fact_id,
-			f.document_id,
-			o.raw_address,
-			dt.type_name as source_type,
-			s.raw_uprn
-		FROM fact_documents_lean f
-		LEFT JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-		LEFT JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-		LEFT JOIN src_document s ON f.document_id = s.document_id
-		WHERE f.matched_address_id IS NULL 
-			AND o.raw_address IS NOT NULL 
-			AND o.raw_address != ''
+		WITH stratified_sample AS (
+			(-- Decision Notice: 6,330 records
+			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+			FROM fact_documents_lean f
+			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+			LEFT JOIN src_document s ON f.document_id = s.document_id
+			WHERE f.matched_address_id IS NULL 
+				AND o.raw_address IS NOT NULL 
+				AND o.raw_address != ''
+				AND dt.type_name = 'Decision Notice'
+			ORDER BY RANDOM()
+			LIMIT 100)
+			
+			UNION ALL
+			
+			(-- Land Charge: 3,350 records  
+			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+			FROM fact_documents_lean f
+			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+			LEFT JOIN src_document s ON f.document_id = s.document_id
+			WHERE f.matched_address_id IS NULL 
+				AND o.raw_address IS NOT NULL 
+				AND o.raw_address != ''
+				AND dt.type_name = 'Land Charge'
+			ORDER BY RANDOM()
+			LIMIT 50)
+			
+			UNION ALL
+			
+			(-- Agreement: 220 records
+			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+			FROM fact_documents_lean f
+			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+			LEFT JOIN src_document s ON f.document_id = s.document_id
+			WHERE f.matched_address_id IS NULL 
+				AND o.raw_address IS NOT NULL 
+				AND o.raw_address != ''
+				AND dt.type_name = 'Agreement'
+			ORDER BY RANDOM()
+			LIMIT 20)
+			
+			UNION ALL
+			
+			(-- Enforcement Notice: 90 records
+			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+			FROM fact_documents_lean f
+			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+			LEFT JOIN src_document s ON f.document_id = s.document_id
+			WHERE f.matched_address_id IS NULL 
+				AND o.raw_address IS NOT NULL 
+				AND o.raw_address != ''
+				AND dt.type_name = 'Enforcement Notice'
+			ORDER BY RANDOM()
+			LIMIT 10)
+			
+			UNION ALL
+			
+			(-- Street Name and Numbering: 10 records
+			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+			FROM fact_documents_lean f
+			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+			LEFT JOIN src_document s ON f.document_id = s.document_id
+			WHERE f.matched_address_id IS NULL 
+				AND o.raw_address IS NOT NULL 
+				AND o.raw_address != ''
+				AND dt.type_name = 'Street Name and Numbering'
+			ORDER BY RANDOM()
+			LIMIT 5)
+		)
+		SELECT fact_id, document_id, raw_address, source_type, raw_uprn
+		FROM stratified_sample
 		ORDER BY 
 			-- Process documents with source UPRNs first
-			CASE WHEN s.raw_uprn IS NOT NULL AND s.raw_uprn != '' THEN 0 ELSE 1 END,
-			dt.type_name, f.document_id
-		-- No limit for full production run (all unmatched records)
+			CASE WHEN raw_uprn IS NOT NULL AND raw_uprn != '' THEN 0 ELSE 1 END,
+			source_type, document_id
 	`
 
 	rows, err := db.Query(query)

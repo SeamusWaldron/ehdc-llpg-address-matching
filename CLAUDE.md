@@ -34,14 +34,19 @@ go run ./app/main.go
 
 ### Go Development
 ```bash
-# Run the main application (includes data import and web server)
-cd app && go run main.go
+# Build the optimized matcher
+go build -o bin/matcher-v2 cmd/matcher-v2/main.go
 
-# Build the application
-cd app && go build -o ../bin/ehdc-llpg main.go
+# Run complete comprehensive matching pipeline
+./bin/matcher-v2 -cmd=comprehensive-match
+
+# Run individual pipeline stages
+./bin/matcher-v2 -cmd=validate-uprns        # Stage 1: Source UPRN validation
+./bin/matcher-v2 -cmd=fuzzy-match-groups    # Stage 2 & 3: Deterministic + Fuzzy
+./bin/matcher-v2 -cmd=conservative-match    # Stage 4: Conservative validation
 
 # Install dependencies
-cd app && go mod tidy
+go mod tidy
 ```
 
 ### Web Interface
