@@ -2534,7 +2534,7 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 			-- Process documents with source UPRNs first
 			CASE WHEN s.raw_uprn IS NOT NULL AND s.raw_uprn != '' THEN 0 ELSE 1 END,
 			dt.type_name, f.document_id
-		LIMIT 10  -- Very small batch for demonstration
+		-- No limit for full production run (all unmatched records)
 	`
 
 	rows, err := db.Query(query)
@@ -2543,45 +2543,8 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	}
 	defer rows.Close()
 
-	// Get target addresses from LLPG (dimensional model)
-	llpgQuery := `
-		SELECT 
-			address_id,
-			uprn,
-			full_address
-		FROM dim_address 
-		WHERE full_address IS NOT NULL 
-			AND full_address != ''
-			AND uprn IS NOT NULL
-			AND is_historic = false
-		ORDER BY uprn
-	`
-
-	llpgRows, err := db.Query(llpgQuery)
-	if err != nil {
-		return fmt.Errorf("failed to query LLPG addresses: %v", err)
-	}
-
-	// Load LLPG addresses into memory for comparison
-	type LLPGAddress struct {
-		AddressID int64
-		UPRN      string
-		Address   string
-	}
-	
-	var llpgAddresses []LLPGAddress
-	for llpgRows.Next() {
-		var llpg LLPGAddress
-		err := llpgRows.Scan(&llpg.AddressID, &llpg.UPRN, &llpg.Address)
-		if err != nil {
-			llpgRows.Close()
-			return fmt.Errorf("failed to scan LLPG row: %v", err)
-		}
-		llpgAddresses = append(llpgAddresses, llpg)
-	}
-	llpgRows.Close()
-
-	fmt.Printf("Loaded %d LLPG addresses for matching\n", len(llpgAddresses))
+	// PRODUCTION OPTIMIZATION: Use database-level matching instead of loading all addresses
+	fmt.Printf("Using optimized database-level matching for production scale\n")
 
 	// Process unmatched documents
 	var processedCount, acceptedCount, rejectedCount, reviewCount int
@@ -2647,25 +2610,15 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 			}
 		}
 
-		// Find best match using conservative validation
-		var bestMatch *LLPGAddress
-		var bestDecision validation.MatchDecision
-		bestConfidence := 0.0
-
-		// Test against LLPG addresses (limited for demonstration)
-		for i, llpg := range llpgAddresses {
-			// Limit search for demonstration - in production use spatial indexing
-			if i > 20 {
-				break
+		// PRODUCTION OPTIMIZATION: Use targeted database queries for matching
+		ctx := &runConservativeMatchingContext{}
+		bestMatch, bestDecision, err := ctx.findBestMatchOptimized(db, sourceAddress, validator, localDebug && processedCount <= 10)
+		if err != nil {
+			if localDebug && processedCount <= 10 {
+				fmt.Printf("Error finding match: %v\n", err)
 			}
-
-			decision := validator.MakeMatchDecision(sourceAddress, llpg.Address)
-			
-			if decision.Accept && decision.Confidence > bestConfidence {
-				bestConfidence = decision.Confidence
-				bestDecision = decision
-				bestMatch = &llpg
-			}
+			rejectedCount++
+			continue
 		}
 
 		// Process the result
@@ -2676,8 +2629,12 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 				fmt.Printf("MATCH FOUND: UPRN %s (Address ID: %d)\n", bestMatch.UPRN, bestMatch.AddressID)
 				fmt.Printf("Target: %s\n", bestMatch.Address)
 				fmt.Printf("Decision: %s\n", bestDecision.String())
-				fmt.Printf("House Match: %s\n", bestDecision.ComponentValidation.HouseNumberMatch.String())
-				fmt.Printf("Street Match: %s\n", bestDecision.ComponentValidation.StreetMatch.String())
+				if bestDecision.ComponentValidation.HouseNumberMatch.Valid {
+					fmt.Printf("House Match: %s\n", bestDecision.ComponentValidation.HouseNumberMatch.String())
+				}
+				if bestDecision.ComponentValidation.StreetMatch.Valid {
+					fmt.Printf("Street Match: %s\n", bestDecision.ComponentValidation.StreetMatch.String())
+				}
 			}
 
 			// Update the dimensional fact table with the conservative match
@@ -2743,4 +2700,254 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	fmt.Printf("✓ Vague addresses ('Land at', 'Rear of') excluded\n")
 
 	return nil
+}
+
+// PRODUCTION OPTIMIZATION: Efficient database-driven matching
+type OptimizedMatch struct {
+	AddressID int64
+	UPRN      string
+	Address   string
+}
+
+// findBestMatchOptimized uses database-level optimizations for efficient matching
+func (v *runConservativeMatchingContext) findBestMatchOptimized(db *sql.DB, sourceAddress string, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	// Parse source address to extract components for targeted searching
+	components := v.ParseAddress(sourceAddress)
+	
+	if debug {
+		fmt.Printf("Parsed components: %s\n", components.String())
+	}
+	
+	// Pre-validate the source address
+	addrValidation := v.ValidateAddressForMatching(sourceAddress)
+	if !addrValidation.Suitable {
+		if debug {
+			fmt.Printf("Source address not suitable for matching: %v\n", addrValidation.Issues)
+		}
+		return nil, validation.MatchDecision{Accept: false, Reason: "Source address validation failed"}, nil
+	}
+	
+	// STRATEGY 1: Exact component matching (most precise)
+	if components.HasHouseNumber() && components.HasStreet() {
+		match, decision, err := v.tryExactComponentMatch(db, components, validator, debug)
+		if err != nil {
+			return nil, validation.MatchDecision{}, err
+		}
+		if match != nil && decision.Accept {
+			return match, decision, nil
+		}
+	}
+	
+	// STRATEGY 2: Postcode + House Number matching (high precision)
+	if components.HasHouseNumber() && components.HasValidPostcode() {
+		match, decision, err := v.tryPostcodeHouseMatch(db, components, validator, debug)
+		if err != nil {
+			return nil, validation.MatchDecision{}, err
+		}
+		if match != nil && decision.Accept {
+			return match, decision, nil
+		}
+	}
+	
+	// STRATEGY 3: Street similarity matching (medium precision)
+	if components.HasStreet() {
+		match, decision, err := v.tryStreetSimilarityMatch(db, components, validator, debug)
+		if err != nil {
+			return nil, validation.MatchDecision{}, err
+		}
+		if match != nil && decision.Accept {
+			return match, decision, nil
+		}
+	}
+	
+	// No suitable match found
+	return nil, validation.MatchDecision{
+		Accept: false,
+		Reason: "No matches found meeting conservative validation criteria",
+		Method: "Conservative Search Complete",
+	}, nil
+}
+
+// tryExactComponentMatch looks for exact house number + street matches
+func (v *runConservativeMatchingContext) tryExactComponentMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	query := `
+		SELECT da.address_id, da.uprn, da.full_address
+		FROM dim_address da
+		WHERE da.is_historic = false
+			AND da.uprn IS NOT NULL
+			AND da.full_address IS NOT NULL
+			-- Use database text search for efficiency
+			AND UPPER(da.full_address) LIKE '%' || $1 || '%'  -- House number
+			AND UPPER(da.full_address) LIKE '%' || $2 || '%'  -- Street
+		ORDER BY 
+			-- Prefer shorter addresses (more likely to be exact matches)
+			LENGTH(da.full_address),
+			da.address_id
+		LIMIT 10
+	`
+	
+	houseNum := strings.ToUpper(strings.TrimSpace(components.HouseNumber))
+	street := strings.ToUpper(strings.TrimSpace(components.Street))
+	
+	if debug {
+		fmt.Printf("Exact component search: house='%s', street='%s'\n", houseNum, street)
+	}
+	
+	rows, err := db.Query(query, houseNum, street)
+	if err != nil {
+		return nil, validation.MatchDecision{}, fmt.Errorf("exact component query failed: %v", err)
+	}
+	defer rows.Close()
+	
+	return v.evaluateCandidates(rows, validator, components.Raw, debug, "Exact Component")
+}
+
+// tryPostcodeHouseMatch looks for postcode + house number matches
+func (v *runConservativeMatchingContext) tryPostcodeHouseMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	query := `
+		SELECT da.address_id, da.uprn, da.full_address
+		FROM dim_address da
+		WHERE da.is_historic = false
+			AND da.uprn IS NOT NULL
+			AND da.full_address IS NOT NULL
+			AND UPPER(da.full_address) LIKE '%' || $1 || '%'  -- House number
+			AND UPPER(da.full_address) LIKE '%' || $2 || '%'  -- Postcode
+		ORDER BY LENGTH(da.full_address), da.address_id
+		LIMIT 20
+	`
+	
+	houseNum := strings.ToUpper(strings.TrimSpace(components.HouseNumber))
+	postcode := strings.ToUpper(strings.TrimSpace(components.Postcode))
+	
+	if debug {
+		fmt.Printf("Postcode+House search: house='%s', postcode='%s'\n", houseNum, postcode)
+	}
+	
+	rows, err := db.Query(query, houseNum, postcode)
+	if err != nil {
+		return nil, validation.MatchDecision{}, fmt.Errorf("postcode+house query failed: %v", err)
+	}
+	defer rows.Close()
+	
+	return v.evaluateCandidates(rows, validator, components.Raw, debug, "Postcode+House")
+}
+
+// tryStreetSimilarityMatch uses trigram similarity for street-based matching
+func (v *runConservativeMatchingContext) tryStreetSimilarityMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	// Use PostgreSQL's trigram similarity for efficient fuzzy matching
+	query := `
+		SELECT da.address_id, da.uprn, da.full_address,
+			   similarity(UPPER(da.full_address), UPPER($1)) as sim_score
+		FROM dim_address da
+		WHERE da.is_historic = false
+			AND da.uprn IS NOT NULL
+			AND da.full_address IS NOT NULL
+			AND similarity(UPPER(da.full_address), UPPER($1)) > 0.3  -- Pre-filter with low threshold
+		ORDER BY sim_score DESC, LENGTH(da.full_address)
+		LIMIT 50  -- Get top candidates for validation
+	`
+	
+	if debug {
+		fmt.Printf("Street similarity search for: '%s'\n", components.Raw)
+	}
+	
+	rows, err := db.Query(query, components.Raw)
+	if err != nil {
+		return nil, validation.MatchDecision{}, fmt.Errorf("street similarity query failed: %v", err)
+	}
+	defer rows.Close()
+	
+	return v.evaluateCandidatesWithSimilarity(rows, validator, components.Raw, debug, "Street Similarity")
+}
+
+// evaluateCandidates processes query results and applies conservative validation
+func (v *runConservativeMatchingContext) evaluateCandidates(rows *sql.Rows, validator *validation.AddressValidator, sourceAddress string, debug bool, method string) (*OptimizedMatch, validation.MatchDecision, error) {
+	var bestMatch *OptimizedMatch
+	var bestDecision validation.MatchDecision
+	bestConfidence := 0.0
+	candidateCount := 0
+	
+	for rows.Next() {
+		var candidate OptimizedMatch
+		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address)
+		if err != nil {
+			return nil, validation.MatchDecision{}, fmt.Errorf("failed to scan candidate: %v", err)
+		}
+		
+		candidateCount++
+		
+		// Apply conservative validation
+		decision := validator.MakeMatchDecision(sourceAddress, candidate.Address)
+		
+		if debug && candidateCount <= 3 {
+			fmt.Printf("  Candidate %d: %s -> %s (confidence: %.3f)\n", 
+				candidateCount, candidate.Address, decision.String(), decision.Confidence)
+		}
+		
+		if decision.Accept && decision.Confidence > bestConfidence {
+			bestConfidence = decision.Confidence
+			bestDecision = decision
+			bestMatch = &candidate
+		}
+	}
+	
+	if debug {
+		fmt.Printf("%s search: evaluated %d candidates, best confidence: %.3f\n", 
+			method, candidateCount, bestConfidence)
+	}
+	
+	return bestMatch, bestDecision, nil
+}
+
+// evaluateCandidatesWithSimilarity handles results that include similarity scores
+func (v *runConservativeMatchingContext) evaluateCandidatesWithSimilarity(rows *sql.Rows, validator *validation.AddressValidator, sourceAddress string, debug bool, method string) (*OptimizedMatch, validation.MatchDecision, error) {
+	var bestMatch *OptimizedMatch
+	var bestDecision validation.MatchDecision
+	bestConfidence := 0.0
+	candidateCount := 0
+	
+	for rows.Next() {
+		var candidate OptimizedMatch
+		var simScore float64
+		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address, &simScore)
+		if err != nil {
+			return nil, validation.MatchDecision{}, fmt.Errorf("failed to scan candidate with similarity: %v", err)
+		}
+		
+		candidateCount++
+		
+		// Apply conservative validation
+		decision := validator.MakeMatchDecision(sourceAddress, candidate.Address)
+		
+		if debug && candidateCount <= 3 {
+			fmt.Printf("  Candidate %d (sim: %.3f): %s -> %s (confidence: %.3f)\n", 
+				candidateCount, simScore, candidate.Address, decision.String(), decision.Confidence)
+		}
+		
+		if decision.Accept && decision.Confidence > bestConfidence {
+			bestConfidence = decision.Confidence
+			bestDecision = decision
+			bestMatch = &candidate
+		}
+	}
+	
+	if debug {
+		fmt.Printf("%s search: evaluated %d candidates, best confidence: %.3f\n", 
+			method, candidateCount, bestConfidence)
+	}
+	
+	return bestMatch, bestDecision, nil
+}
+
+// Context struct to hold method receivers (Go doesn't allow methods on function types)
+type runConservativeMatchingContext struct{}
+
+func (v *runConservativeMatchingContext) ParseAddress(address string) validation.AddressComponents {
+	parser := validation.NewAddressParser()
+	return parser.ParseAddress(address)
+}
+
+func (v *runConservativeMatchingContext) ValidateAddressForMatching(address string) validation.AddressValidation {
+	parser := validation.NewAddressParser()
+	return parser.ValidateAddressForMatching(address)
 }
