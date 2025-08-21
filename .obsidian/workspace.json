@@ -184,6 +184,8 @@
   },
   "active": "d8234de6f89c14b2",
   "lastOpenFiles": [
+    "cmd/matcher-v2/main.go.tmp.1631.1755769157034",
+    "cmd/matcher-v2/main.go.tmp.1631.1755768975740",
     "cmd/matcher-v2/main.go.tmp.1631.1755768359093",
     "bin/matcher-v2",
     "internal/validation/validator_test.go",
@@ -195,8 +197,6 @@
     "IMPROVEMENTS_IMPLEMENTED.md",
     "bin/matcher-v3-test",
     "test_comprehensive.sql",
-    "bin/matcher-v3-comprehensive",
-    "bin/matcher-v2-improved",
     "DEPLOYMENT_SUCCESS_REPORT.md",
     "DIMENSIONAL_MODEL_DEPLOYMENT_SUMMARY.md",
     "FACT_TABLE_DESIGN.md",

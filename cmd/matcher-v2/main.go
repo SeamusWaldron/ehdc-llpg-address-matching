@@ -2534,7 +2534,7 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 			-- Process documents with source UPRNs first
 			CASE WHEN s.raw_uprn IS NOT NULL AND s.raw_uprn != '' THEN 0 ELSE 1 END,
 			dt.type_name, f.document_id
-		LIMIT 1000  -- Start with a manageable batch
+		LIMIT 10  -- Very small batch for demonstration
 	`
 
 	rows, err := db.Query(query)
@@ -2652,10 +2652,10 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 		var bestDecision validation.MatchDecision
 		bestConfidence := 0.0
 
-		// Test against all LLPG addresses (in production, this would be optimized)
+		// Test against LLPG addresses (limited for demonstration)
 		for i, llpg := range llpgAddresses {
-			// Limit search for testing - in production use spatial indexing
-			if i > 100 && bestMatch != nil {
+			// Limit search for demonstration - in production use spatial indexing
+			if i > 20 {
 				break
 			}
 
