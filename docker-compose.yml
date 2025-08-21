@@ -1,0 +1,154 @@
+# EHDC LLPG Address Matching System - Complete Stack
+# Implements ADDRESS_MATCHING_ALGORITHM.md with local-first approach
+
+version: '3.8'
+
+services:
+  # PostgreSQL with PostGIS for address data and fuzzy matching
+  postgres:
+    image: postgres:15
+    container_name: ehdc_postgres
+    environment:
+      POSTGRES_DB: ehdc_llpg
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: kljh234hjkl2h
+    ports:
+      - "15435:5432"
+    volumes:
+      - /Users/seamus_waldron/Documents/Dev/databases/ehdc-llpg:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    command: |
+      postgres 
+      -c shared_preload_libraries=pg_stat_statements 
+      -c max_connections=200 
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+
+  # Qdrant vector database for semantic address matching
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: ehdc_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
+
+  # Ollama for local embeddings (nomic-embed-text model)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ehdc_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: "24h"
+      OLLAMA_HOST: "0.0.0.0"
+    # Pull the embedding model on startup
+    command: |
+      sh -c "ollama serve & sleep 10 && ollama pull nomic-embed-text && wait"
+
+  # libpostal HTTP service for address parsing
+  libpostal:
+    build:
+      context: .
+      dockerfile: Dockerfile.libpostal
+    container_name: ehdc_libpostal
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+
+  # Main matching application
+  matcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ehdc_matcher
+    depends_on:
+      - postgres
+      - qdrant
+      - ollama
+      - libpostal
+    environment:
+      # Database configuration
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ehdc_llpg
+      DB_SSLMODE: disable
+      
+      # Vector database configuration
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      QDRANT_API_KEY: ""
+      
+      # Embedding service configuration
+      OLLAMA_HOST: ollama
+      OLLAMA_PORT: 11434
+      OLLAMA_MODEL: nomic-embed-text
+      
+      # Address parsing service
+      LIBPOSTAL_HOST: libpostal
+      LIBPOSTAL_PORT: 8080
+      
+      # Matching configuration
+      MATCH_BATCH_SIZE: 1000
+      MATCH_WORKERS: 8
+      MATCH_CACHE_SIZE: 10000
+      
+      # Feature flags
+      ENABLE_VECTOR_MATCHING: true
+      ENABLE_PHONETIC_MATCHING: true
+      ENABLE_SPATIAL_MATCHING: true
+      
+      # Logging
+      LOG_LEVEL: info
+      DEBUG: false
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    command: |
+      sh -c "
+        echo 'Waiting for services to be ready...' &&
+        sleep 30 &&
+        echo 'Setting up database schema...' &&
+        ./matcher-v2 -cmd=setup-db &&
+        echo 'Address matching system ready!'
+      "
+
+  # Web interface (optional)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: ehdc_web
+    ports:
+      - "8443:8443"
+    depends_on:
+      - postgres
+      - matcher
+    environment:
+      WEB_PORT: 8443
+      WEB_HOST: "0.0.0.0"
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ehdc_llpg
+    volumes:
+      - ./internal/web/static:/app/static
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_storage:
+    driver: local
+  ollama_data:
+    driver: local

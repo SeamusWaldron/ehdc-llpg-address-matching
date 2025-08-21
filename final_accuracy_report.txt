@@ -1,0 +1,86 @@
+============================================================
+EHDC LLPG REAL GOPOSTAL ACCURACY REPORT
+============================================================
+
+1. PREPROCESSING COMPLETION STATUS
+==================================
+     dataset      | total_records | processed_records | completion_percentage | addresses_with_components 
+------------------+---------------+-------------------+-----------------------+---------------------------
+ LLPG Addresses   |         71656 |             71656 |                100.00 |                     71391
+ Source Documents |        129701 |            129701 |                100.00 |                    116542
+(2 rows)
+
+
+2. COMPONENT EXTRACTION QUALITY
+===============================
+ dataset | total_processed | has_house_number | has_road | has_city | has_postcode | has_unit 
+---------+-----------------+------------------+----------+----------+--------------+----------
+ LLPG    |           71656 |            50844 |    71083 |    71349 |        64145 |     2472
+ Source  |          129701 |            67566 |   112884 |   118626 |        68231 |     1698
+(2 rows)
+
+
+3. MATCHING RESULTS SUMMARY
+==========================
+
+4. MATCHING METHOD BREAKDOWN
+============================
+
+5. CONFIDENCE SCORE DISTRIBUTION
+===============================
+
+6. GEOGRAPHIC DISTRIBUTION
+=========================
+               city               | total_documents | matched_documents | match_rate_percentage | avg_confidence 
+----------------------------------+-----------------+-------------------+-----------------------+----------------
+ horndean clanfield waterlooville |              60 |                60 |                100.00 |         0.9732
+ headley down headley             |              12 |                12 |                100.00 |         0.7049
+ froxfield petersfield            |               8 |                 8 |                100.00 |         0.8000
+ ora                              |               7 |                 7 |                100.00 |         0.7619
+ dq                               |               7 |                 7 |                100.00 |         0.7577
+ dw                               |               6 |                 6 |                100.00 |         0.8000
+ soldridge medstead alton         |               6 |                 6 |                100.00 |         0.7630
+ valence alton                    |               6 |                 6 |                100.00 |         0.6400
+ osj                              |               5 |                 5 |                100.00 |         0.8000
+ stoke-on-trent                   |               5 |                 5 |                100.00 |         0.5778
+ alton alton                      |               5 |                 5 |                100.00 |         0.8229
+ bx                               |               5 |                 5 |                100.00 |         0.8000
+ lindford whitehill               |              13 |                12 |                 92.31 |         0.8119
+ catherington horndean            |             241 |               220 |                 91.29 |         0.7761
+ otz                              |               8 |                 7 |                 87.50 |         0.8000
+ dockenfield farnham              |              21 |                18 |                 85.71 |         0.7333
+ horndean horndean                |               7 |                 6 |                 85.71 |         0.8000
+ west liss liss                   |               6 |                 5 |                 83.33 |         0.8000
+ liphook liphook                  |              17 |                14 |                 82.35 |         0.8429
+ rowlands                         |              17 |                14 |                 82.35 |         0.7456
+(20 rows)
+
+
+7. PROCESSING PERFORMANCE METRICS
+================================
+  table_name  | total_processed | avg_records_per_second | total_processing_time | batch_count 
+--------------+-----------------+------------------------+-----------------------+-------------
+ dim_address  |           71646 |                   0.00 | 13636042:24:26        |           4
+ src_document |          129701 |                   0.00 | 23040201:41:23        |           3
+(2 rows)
+
+
+8. SAMPLE HIGH-QUALITY MATCHES
+=============================
+
+9. ADDRESSES REQUIRING MANUAL REVIEW
+===================================
+
+10. OVERALL ACCURACY IMPROVEMENT
+===============================
+
+============================================================
+REPORT COMPLETE
+============================================================
+
+KEY RECOMMENDATIONS:
+• Auto-accept all matches with confidence ≥ 0.95
+• Manual review required for matches 0.70-0.94
+• Investigate no-match cases for data quality issues
+• Consider fuzzy matching improvements for remaining cases
+

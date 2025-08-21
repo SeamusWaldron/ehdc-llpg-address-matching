@@ -1,0 +1,42 @@
+EHDC Real gopostal Preprocessor v1.0.0-real-gopostal
+Using libpostal for maximum UK address parsing accuracy
+
+📊 Real gopostal Processing Statistics
+=====================================
+
+📍 LLPG Addresses:
+   Total:     71656
+   Processed: 71656 (100.0%)
+   Remaining: 0
+
+📄 Source Documents:
+   Total:     129701
+   Processed: 129701 (100.0%)
+   Remaining: 0
+
+⚡ Processing Performance:
+   dim_address: 0.0 records/sec (4 batches)
+   src_document: 0.0 records/sec (3 batches)
+
+🔍 Sample REAL gopostal Components:
+
+   Original: 16 Hillside Close, Horndean, Waterlooville, PO8 0ND
+   → Components: house#=16, road=hillside close, city=horndean waterlooville, postcode=po8 0nd
+
+   Original: 2 Hillside Close, Horndean, Waterlooville, PO8 0ND
+   → Components: house#=2, road=hillside close, city=horndean waterlooville, postcode=po8 0nd
+
+   Original: 5 Hillside Close, Horndean, Waterlooville, PO8 0ND
+   → Components: house#=5, road=hillside close, city=horndean waterlooville, postcode=po8 0nd
+
+   Original: 9 Hillside Close, Horndean, Waterlooville, PO8 0ND
+   → Components: house#=9, road=hillside close, city=horndean waterlooville, postcode=po8 0nd
+
+   Original: 13 White Dirt Lane, Horndean, Waterlooville, PO8 0NB
+   → Components: house#=13, road=white dirt lane, city=horndean waterlooville, postcode=po8 0nb
+
+🎯 Overall Progress:
+   Total processed: 201357/201357 (100.0%)
+
+🎉 ALL ADDRESSES PROCESSED!
+   Ready for maximum accuracy component-based matching!

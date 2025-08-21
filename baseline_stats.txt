@@ -1,0 +1,42 @@
+EHDC Real gopostal Preprocessor v1.0.0-real-gopostal
+Using libpostal for maximum UK address parsing accuracy
+
+📊 Real gopostal Processing Statistics
+=====================================
+
+📍 LLPG Addresses:
+   Total:     71656
+   Processed: 3110 (4.3%)
+   Remaining: 68546
+
+📄 Source Documents:
+   Total:     129701
+   Processed: 1100 (0.8%)
+   Remaining: 128601
+
+⚡ Processing Performance:
+   dim_address: 0.0 records/sec (3 batches)
+   src_document: 0.0 records/sec (2 batches)
+
+🔍 Sample REAL gopostal Components:
+
+   Original: Oakleigh, West Tisted Road, West Tisted, Alresford, SO24 0HJ
+   → Components: road=OAKLEIGH, WEST TISTED ROAD
+
+   Original: Jasmine Cottage, Church Street, Ropley, Alresford, SO24 0DT
+   → Components: road=JASMINE COTTAGE, CHURCH STREET
+
+   Original: Melbourne, Darvill Road, Ropley, Alresford, SO24 0BW
+   → Components: road=MELBOURNE, DARVILL ROAD
+
+   Original: Plum Tree House, Gascoigne Lane, Ropley, Alresford, SO24 0BT
+   → Components: road=PLUM TREE HOUSE, GASCOIGNE LANE
+
+   Original: Chase Farm, Gilbert Street, Ropley, Alresford, SO24 0BY
+   → Components: road=CHASE FARM, GILBERT STREET
+
+🎯 Overall Progress:
+   Total processed: 4210/201357 (2.1%)
+
+📋 To process remaining 197147 addresses:
+   ./gopostal-real -cmd=preprocess-all -limit=0
