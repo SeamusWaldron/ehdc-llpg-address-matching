@@ -45,3 +45,15 @@ config.json
 # Build artifacts
 /build/
 /dist/
+
+# Large data files
+llpg_docs/osopenuprn_202507.csv
+archive/osopenuprn_202507_csv.zip
+archive/*.zip
+*.csv.zip
+
+# Data files (exclude large datasets)
+/source_docs/*.csv
+/llpg_docs/*.csv
+!/source_docs/*_example.csv
+!/llpg_docs/*_example.csv
