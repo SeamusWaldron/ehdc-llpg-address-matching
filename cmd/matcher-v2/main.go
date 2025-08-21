@@ -24,6 +24,7 @@ import (
 	"github.com/ehdc-llpg/internal/etl"
 	"github.com/ehdc-llpg/internal/match"
 	"github.com/ehdc-llpg/internal/phonetics"
+	"github.com/ehdc-llpg/internal/validation"
 	"github.com/ehdc-llpg/internal/vector"
 )
 
@@ -31,7 +32,7 @@ const version = "2.0.0-proper-algorithm"
 
 func main() {
 	var (
-		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, setup-vector, match-batch, match-single, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
+		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
 		llpgFile    = flag.String("llpg", "", "Path to LLPG CSV file")
 		osUprnFile  = flag.String("os-uprn", "", "Path to OS Open UPRN CSV file")
 		sourceFiles = flag.String("sources", "", "Comma-separated paths to source CSV files (type:path,type:path)")
@@ -83,6 +84,8 @@ func main() {
 		err = runBatchMatching(*debug, db, *runLabel)
 	case "match-single":
 		err = runSingleMatch(*debug, db, *address)
+	case "conservative-match":
+		err = runConservativeMatching(*debug, db, *runLabel)
 	case "apply-corrections":
 		err = applyGroupConsensusCorrections(*debug, db)
 	case "fuzzy-match-groups":
@@ -2499,5 +2502,179 @@ func runComprehensiveMatching(localDebug bool, db *sql.DB) error {
 
 	fmt.Println("\n=======================================================")
 	fmt.Println("Comprehensive multi-layered matching completed!")
+	return nil
+}
+
+// runConservativeMatching runs the new conservative address matching with component validation
+func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error {
+	fmt.Println("Running Conservative Address Matching...")
+	fmt.Println("=====================================")
+	fmt.Printf("Using validation framework to prevent false positive matches\n")
+	fmt.Printf("Algorithm: Conservative validation with house number + street verification\n\n")
+
+	// Initialize the address validator
+	validator := validation.NewAddressValidator()
+
+	// Get unmatched documents from the fact table
+	query := `
+		SELECT 
+			document_id,
+			source_address,
+			source_type 
+		FROM fact_documents 
+		WHERE matched_uprn IS NULL 
+			AND source_address IS NOT NULL 
+			AND source_address != ''
+		ORDER BY source_type, document_id
+		LIMIT 1000  -- Start with a manageable batch
+	`
+
+	rows, err := db.Query(query)
+	if err != nil {
+		return fmt.Errorf("failed to query unmatched documents: %v", err)
+	}
+	defer rows.Close()
+
+	// Get target addresses from LLPG
+	llpgQuery := `
+		SELECT 
+			uprn,
+			full_address
+		FROM ehdc_addresses 
+		WHERE full_address IS NOT NULL 
+			AND full_address != ''
+		ORDER BY uprn
+	`
+
+	llpgRows, err := db.Query(llpgQuery)
+	if err != nil {
+		return fmt.Errorf("failed to query LLPG addresses: %v", err)
+	}
+
+	// Load LLPG addresses into memory for comparison
+	type LLPGAddress struct {
+		UPRN    int64
+		Address string
+	}
+	
+	var llpgAddresses []LLPGAddress
+	for llpgRows.Next() {
+		var llpg LLPGAddress
+		err := llpgRows.Scan(&llpg.UPRN, &llpg.Address)
+		if err != nil {
+			llpgRows.Close()
+			return fmt.Errorf("failed to scan LLPG row: %v", err)
+		}
+		llpgAddresses = append(llpgAddresses, llpg)
+	}
+	llpgRows.Close()
+
+	fmt.Printf("Loaded %d LLPG addresses for matching\n", len(llpgAddresses))
+
+	// Process unmatched documents
+	var processedCount, acceptedCount, rejectedCount, reviewCount int
+	
+	for rows.Next() {
+		var docID int64
+		var sourceAddress, sourceType string
+		
+		err := rows.Scan(&docID, &sourceAddress, &sourceType)
+		if err != nil {
+			return fmt.Errorf("failed to scan document row: %v", err)
+		}
+
+		processedCount++
+		
+		if localDebug && processedCount <= 10 {
+			fmt.Printf("\n--- Processing Document %d ---\n", docID)
+			fmt.Printf("Source: %s (%s)\n", sourceAddress, sourceType)
+		}
+
+		// Find best match using conservative validation
+		var bestMatch *LLPGAddress
+		var bestDecision validation.MatchDecision
+		bestConfidence := 0.0
+
+		// Test against all LLPG addresses (in production, this would be optimized)
+		for i, llpg := range llpgAddresses {
+			// Limit search for testing - in production use spatial indexing
+			if i > 100 && bestMatch != nil {
+				break
+			}
+
+			decision := validator.MakeMatchDecision(sourceAddress, llpg.Address)
+			
+			if decision.Accept && decision.Confidence > bestConfidence {
+				bestConfidence = decision.Confidence
+				bestDecision = decision
+				bestMatch = &llpg
+			}
+		}
+
+		// Process the result
+		if bestMatch != nil && bestDecision.Accept {
+			acceptedCount++
+			
+			if localDebug && processedCount <= 10 {
+				fmt.Printf("MATCH FOUND: UPRN %d\n", bestMatch.UPRN)
+				fmt.Printf("Target: %s\n", bestMatch.Address)
+				fmt.Printf("Decision: %s\n", bestDecision.String())
+				fmt.Printf("House Match: %s\n", bestDecision.ComponentValidation.HouseNumberMatch.String())
+				fmt.Printf("Street Match: %s\n", bestDecision.ComponentValidation.StreetMatch.String())
+			}
+
+			// Update the fact table with the match
+			_, err = db.Exec(`
+				UPDATE fact_documents 
+				SET matched_uprn = $1,
+				    match_method = $2,
+				    match_confidence = $3,
+				    match_notes = $4,
+				    matched_at = NOW()
+				WHERE document_id = $5
+			`, bestMatch.UPRN, bestDecision.Method, bestDecision.Confidence, bestDecision.Reason, docID)
+			
+			if err != nil {
+				fmt.Printf("Warning: failed to update document %d: %v\n", docID, err)
+			}
+
+		} else if bestDecision.RequiresReview {
+			reviewCount++
+			
+			if localDebug && processedCount <= 10 {
+				fmt.Printf("REQUIRES REVIEW: %s\n", bestDecision.Reason)
+			}
+			
+		} else {
+			rejectedCount++
+			
+			if localDebug && processedCount <= 10 {
+				fmt.Printf("NO MATCH: %s\n", bestDecision.Reason)
+			}
+		}
+
+		// Progress update
+		if processedCount%100 == 0 {
+			fmt.Printf("Processed %d documents... (Accepted: %d, Review: %d, Rejected: %d)\n",
+				processedCount, acceptedCount, reviewCount, rejectedCount)
+		}
+	}
+
+	// Final summary
+	fmt.Println("\n=== CONSERVATIVE MATCHING SUMMARY ===")
+	fmt.Printf("Documents processed: %d\n", processedCount)
+	fmt.Printf("Auto-accepted matches: %d (%.1f%%)\n", acceptedCount, 
+		float64(acceptedCount)*100.0/float64(processedCount))
+	fmt.Printf("Requiring review: %d (%.1f%%)\n", reviewCount, 
+		float64(reviewCount)*100.0/float64(processedCount))
+	fmt.Printf("Rejected: %d (%.1f%%)\n", rejectedCount, 
+		float64(rejectedCount)*100.0/float64(processedCount))
+	fmt.Println("=====================================")
+
+	fmt.Printf("\nConservative matching prevents false positives like:\n")
+	fmt.Printf("- '168 Station Road' ≠ '147 Station Road'\n")
+	fmt.Printf("- 'Unit 10' ≠ 'Unit 7'\n")
+	fmt.Printf("- House number mismatches are automatically rejected\n")
+
 	return nil
 }
