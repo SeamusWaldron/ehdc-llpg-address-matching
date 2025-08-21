@@ -2515,17 +2515,20 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	// Initialize the address validator
 	validator := validation.NewAddressValidator()
 
-	// Get unmatched documents from the fact table
+	// Get unmatched documents from the dimensional model
 	query := `
 		SELECT 
-			document_id,
-			source_address,
-			source_type 
-		FROM fact_documents 
-		WHERE matched_uprn IS NULL 
-			AND source_address IS NOT NULL 
-			AND source_address != ''
-		ORDER BY source_type, document_id
+			f.fact_id,
+			f.document_id,
+			o.raw_address,
+			dt.type_name as source_type
+		FROM fact_documents_lean f
+		LEFT JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+		LEFT JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+		WHERE f.matched_address_id IS NULL 
+			AND o.raw_address IS NOT NULL 
+			AND o.raw_address != ''
+		ORDER BY dt.type_name, f.document_id
 		LIMIT 1000  -- Start with a manageable batch
 	`
 
@@ -2535,14 +2538,17 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	}
 	defer rows.Close()
 
-	// Get target addresses from LLPG
+	// Get target addresses from LLPG (dimensional model)
 	llpgQuery := `
 		SELECT 
+			address_id,
 			uprn,
 			full_address
-		FROM ehdc_addresses 
+		FROM dim_address 
 		WHERE full_address IS NOT NULL 
 			AND full_address != ''
+			AND uprn IS NOT NULL
+			AND is_historic = false
 		ORDER BY uprn
 	`
 
@@ -2553,14 +2559,15 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 
 	// Load LLPG addresses into memory for comparison
 	type LLPGAddress struct {
-		UPRN    int64
-		Address string
+		AddressID int64
+		UPRN      string
+		Address   string
 	}
 	
 	var llpgAddresses []LLPGAddress
 	for llpgRows.Next() {
 		var llpg LLPGAddress
-		err := llpgRows.Scan(&llpg.UPRN, &llpg.Address)
+		err := llpgRows.Scan(&llpg.AddressID, &llpg.UPRN, &llpg.Address)
 		if err != nil {
 			llpgRows.Close()
 			return fmt.Errorf("failed to scan LLPG row: %v", err)
@@ -2575,10 +2582,10 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	var processedCount, acceptedCount, rejectedCount, reviewCount int
 	
 	for rows.Next() {
-		var docID int64
+		var factID, docID int64
 		var sourceAddress, sourceType string
 		
-		err := rows.Scan(&docID, &sourceAddress, &sourceType)
+		err := rows.Scan(&factID, &docID, &sourceAddress, &sourceType)
 		if err != nil {
 			return fmt.Errorf("failed to scan document row: %v", err)
 		}
@@ -2616,23 +2623,21 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 			acceptedCount++
 			
 			if localDebug && processedCount <= 10 {
-				fmt.Printf("MATCH FOUND: UPRN %d\n", bestMatch.UPRN)
+				fmt.Printf("MATCH FOUND: UPRN %s (Address ID: %d)\n", bestMatch.UPRN, bestMatch.AddressID)
 				fmt.Printf("Target: %s\n", bestMatch.Address)
 				fmt.Printf("Decision: %s\n", bestDecision.String())
 				fmt.Printf("House Match: %s\n", bestDecision.ComponentValidation.HouseNumberMatch.String())
 				fmt.Printf("Street Match: %s\n", bestDecision.ComponentValidation.StreetMatch.String())
 			}
 
-			// Update the fact table with the match
+			// Update the dimensional fact table with the match
 			_, err = db.Exec(`
-				UPDATE fact_documents 
-				SET matched_uprn = $1,
-				    match_method = $2,
-				    match_confidence = $3,
-				    match_notes = $4,
-				    matched_at = NOW()
-				WHERE document_id = $5
-			`, bestMatch.UPRN, bestDecision.Method, bestDecision.Confidence, bestDecision.Reason, docID)
+				UPDATE fact_documents_lean 
+				SET matched_address_id = $1,
+				    match_confidence_score = $2,
+				    updated_at = NOW()
+				WHERE fact_id = $3
+			`, bestMatch.AddressID, bestDecision.Confidence, factID)
 			
 			if err != nil {
 				fmt.Printf("Warning: failed to update document %d: %v\n", docID, err)
@@ -2671,10 +2676,12 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 		float64(rejectedCount)*100.0/float64(processedCount))
 	fmt.Println("=====================================")
 
-	fmt.Printf("\nConservative matching prevents false positives like:\n")
-	fmt.Printf("- '168 Station Road' ≠ '147 Station Road'\n")
-	fmt.Printf("- 'Unit 10' ≠ 'Unit 7'\n")
-	fmt.Printf("- House number mismatches are automatically rejected\n")
+	fmt.Printf("\nConservative validation framework prevents false positives:\n")
+	fmt.Printf("✓ House number mismatches: '168' ≠ '147' (auto-rejected)\n")
+	fmt.Printf("✓ Unit mismatches: 'Unit 10' ≠ 'Unit 7' (auto-rejected)\n") 
+	fmt.Printf("✓ Street similarity <90%% threshold (requires manual review)\n")
+	fmt.Printf("✓ Component extraction confidence >95%% required\n")
+	fmt.Printf("✓ Vague addresses ('Land at', 'Rear of') excluded\n")
 
 	return nil
 }
