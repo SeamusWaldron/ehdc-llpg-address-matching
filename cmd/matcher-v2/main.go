@@ -2515,20 +2515,25 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	// Initialize the address validator
 	validator := validation.NewAddressValidator()
 
-	// Get unmatched documents from the dimensional model
+	// Get unmatched documents from the dimensional model, including source UPRN data
 	query := `
 		SELECT 
 			f.fact_id,
 			f.document_id,
 			o.raw_address,
-			dt.type_name as source_type
+			dt.type_name as source_type,
+			s.raw_uprn
 		FROM fact_documents_lean f
 		LEFT JOIN dim_original_address o ON f.original_address_id = o.original_address_id
 		LEFT JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+		LEFT JOIN src_document s ON f.document_id = s.document_id
 		WHERE f.matched_address_id IS NULL 
 			AND o.raw_address IS NOT NULL 
 			AND o.raw_address != ''
-		ORDER BY dt.type_name, f.document_id
+		ORDER BY 
+			-- Process documents with source UPRNs first
+			CASE WHEN s.raw_uprn IS NOT NULL AND s.raw_uprn != '' THEN 0 ELSE 1 END,
+			dt.type_name, f.document_id
 		LIMIT 1000  -- Start with a manageable batch
 	`
 
@@ -2580,12 +2585,14 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 
 	// Process unmatched documents
 	var processedCount, acceptedCount, rejectedCount, reviewCount int
+	var sourceUPRNCount int // Track documents matched using source UPRNs
 	
 	for rows.Next() {
 		var factID, docID int64
 		var sourceAddress, sourceType string
+		var sourceUPRN sql.NullString
 		
-		err := rows.Scan(&factID, &docID, &sourceAddress, &sourceType)
+		err := rows.Scan(&factID, &docID, &sourceAddress, &sourceType, &sourceUPRN)
 		if err != nil {
 			return fmt.Errorf("failed to scan document row: %v", err)
 		}
@@ -2595,6 +2602,49 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 		if localDebug && processedCount <= 10 {
 			fmt.Printf("\n--- Processing Document %d ---\n", docID)
 			fmt.Printf("Source: %s (%s)\n", sourceAddress, sourceType)
+			if sourceUPRN.Valid && sourceUPRN.String != "" {
+				fmt.Printf("Source UPRN: %s\n", sourceUPRN.String)
+			}
+		}
+
+		// Check if document already has a source UPRN
+		if sourceUPRN.Valid && sourceUPRN.String != "" {
+			// Find the address record for this source UPRN
+			var targetAddressID int64
+			err := db.QueryRow(`
+				SELECT address_id FROM dim_address 
+				WHERE uprn = $1 AND is_historic = false 
+				LIMIT 1
+			`, sourceUPRN.String).Scan(&targetAddressID)
+			
+			if err == nil {
+				// Found matching address for source UPRN
+				acceptedCount++
+				sourceUPRNCount++
+				
+				if localDebug && processedCount <= 10 {
+					fmt.Printf("USING SOURCE UPRN: %s (Address ID: %d)\n", sourceUPRN.String, targetAddressID)
+				}
+
+				// Update fact table with source UPRN match
+				_, err = db.Exec(`
+					UPDATE fact_documents_lean 
+					SET matched_address_id = $1,
+						match_method_id = 25, -- source_uprn method
+						match_confidence_score = 1.0,
+						updated_at = NOW()
+					WHERE fact_id = $2
+				`, targetAddressID, factID)
+				
+				if err != nil {
+					fmt.Printf("Warning: failed to update document %d with source UPRN: %v\n", docID, err)
+				}
+				
+				// Skip to next document - no need for conservative matching
+				continue
+			} else if localDebug && processedCount <= 10 {
+				fmt.Printf("Source UPRN %s not found in dim_address, proceeding with conservative matching\n", sourceUPRN.String)
+			}
 		}
 
 		// Find best match using conservative validation
@@ -2630,10 +2680,11 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 				fmt.Printf("Street Match: %s\n", bestDecision.ComponentValidation.StreetMatch.String())
 			}
 
-			// Update the dimensional fact table with the match
+			// Update the dimensional fact table with the conservative match
 			_, err = db.Exec(`
 				UPDATE fact_documents_lean 
 				SET matched_address_id = $1,
+				    match_method_id = 26, -- conservative method
 				    match_confidence_score = $2,
 				    updated_at = NOW()
 				WHERE fact_id = $3
@@ -2668,15 +2719,23 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	// Final summary
 	fmt.Println("\n=== CONSERVATIVE MATCHING SUMMARY ===")
 	fmt.Printf("Documents processed: %d\n", processedCount)
-	fmt.Printf("Auto-accepted matches: %d (%.1f%%)\n", acceptedCount, 
+	fmt.Printf("Total matches: %d (%.1f%%)\n", acceptedCount, 
 		float64(acceptedCount)*100.0/float64(processedCount))
+	fmt.Printf("  └─ From Source UPRN: %d (%.1f%%)\n", sourceUPRNCount,
+		float64(sourceUPRNCount)*100.0/float64(processedCount))
+	fmt.Printf("  └─ Conservative Matched: %d (%.1f%%)\n", acceptedCount-sourceUPRNCount,
+		float64(acceptedCount-sourceUPRNCount)*100.0/float64(processedCount))
 	fmt.Printf("Requiring review: %d (%.1f%%)\n", reviewCount, 
 		float64(reviewCount)*100.0/float64(processedCount))
 	fmt.Printf("Rejected: %d (%.1f%%)\n", rejectedCount, 
 		float64(rejectedCount)*100.0/float64(processedCount))
 	fmt.Println("=====================================")
 
-	fmt.Printf("\nConservative validation framework prevents false positives:\n")
+	fmt.Printf("\nMatch Source Tracking:\n")
+	fmt.Printf("✓ 'From Source Data' = UPRN was in original document\n")
+	fmt.Printf("✓ 'Conservative Validation' = UPRN found through matching\n\n")
+
+	fmt.Printf("Conservative validation framework prevents false positives:\n")
 	fmt.Printf("✓ House number mismatches: '168' ≠ '147' (auto-rejected)\n")
 	fmt.Printf("✓ Unit mismatches: 'Unit 10' ≠ 'Unit 7' (auto-rejected)\n") 
 	fmt.Printf("✓ Street similarity <90%% threshold (requires manual review)\n")

@@ -184,6 +184,7 @@
   },
   "active": "d8234de6f89c14b2",
   "lastOpenFiles": [
+    "cmd/matcher-v2/main.go.tmp.1631.1755768359093",
     "bin/matcher-v2",
     "internal/validation/validator_test.go",
     "internal/validation/validator.go",
@@ -196,7 +197,6 @@
     "test_comprehensive.sql",
     "bin/matcher-v3-comprehensive",
     "bin/matcher-v2-improved",
-    "test_fix_fuzzy.go",
     "DEPLOYMENT_SUCCESS_REPORT.md",
     "DIMENSIONAL_MODEL_DEPLOYMENT_SUMMARY.md",
     "FACT_TABLE_DESIGN.md",
