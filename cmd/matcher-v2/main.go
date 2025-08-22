@@ -49,7 +49,7 @@ func getOptimalWorkerCount() int {
 
 func main() {
 	var (
-		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, layer3-parallel-groups, layer3-parallel-docs, layer3-parallel-combined, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
+		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, layer3-parallel-groups, layer3-parallel-docs, layer3-parallel-combined, layer3-enhanced, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
 		llpgFile    = flag.String("llpg", "", "Path to LLPG CSV file")
 		osUprnFile  = flag.String("os-uprn", "", "Path to OS Open UPRN CSV file")
 		sourceFiles = flag.String("sources", "", "Comma-separated paths to source CSV files (type:path,type:path)")
@@ -141,6 +141,8 @@ func main() {
 	//	err = runParallelLayer3Documents(*debug, db)
 	// case "layer3-parallel-combined":
 	//	err = runParallelLayer3Combined(*debug, db)
+	case "layer3-enhanced":
+		err = parallelFuzzyMatchIndividualDocuments(*debug, db)
 	case "validate-integrity":
 		err = validateDataIntegrity(*debug, db)
 	case "stats":
@@ -201,6 +203,9 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("  Run complete parallel Layer 3 (both 3a and 3b):")
 	fmt.Println("    ./matcher-v2 -cmd=layer3-parallel-combined")
+	fmt.Println()
+	fmt.Println("  Run enhanced Layer 3 with address deduplication and auto-scaling:")
+	fmt.Println("    ./matcher-v2 -cmd=layer3-enhanced")
 	fmt.Println()
 	fmt.Println("  Standardize and clean source addresses:")
 	fmt.Println("    ./matcher-v2 -cmd=standardize-addresses")

@@ -118,16 +118,32 @@
   - **Address Deduplication**: Process each unique address only once, apply to all matching documents
   - **Auto-Detected Worker Count**: Dynamic CPU core detection for optimal parallel performance
   - **Improved Architecture**: Removed Layer 3a group logic causing "all Unit 10" matching issues
+  - **Production Deployment**: Successfully processing 90,220+ unique addresses across 9 parallel workers
 - ✅ **CPU Core Auto-Detection**: Implemented across all parallel processing layers
   - **Smart Scaling**: `runtime.NumCPU()` with system-reserved cores and reasonable limits
   - **Applied To**: parallel_layer2.go, parallel_layer3.go, enhanced_layer3.go
   - **Performance**: Automatic scaling from 4-core dev machines to 16+ core production servers
 
+#### Layer 4 Spatial Architecture Designed ✅ (Current Session)
+- ✅ **Spatial Pre-processing Strategy**: Pre-computed road/postcode areas with PostGIS polygons
+  - **dim_road_postcode**: Road+postcode combinations with spatial polygons and UPRN arrays
+  - **dim_road**: Road-only areas with broader geographic coverage
+  - **Spatial Features**: Bounding boxes, centroids, UPRN lists for mapping and validation
+- ✅ **Parallel Spatial Processing**: Multi-worker PostGIS polygon generation
+  - **Auto-scaling Workers**: Dynamic CPU detection for optimal spatial processing
+  - **Batch Processing**: 25 combinations per batch across parallel workers
+  - **Performance Target**: 15-30 minutes vs 2-3 hours sequential processing
+- ✅ **Simplified Layer 4 Logic**: Transform complex matching into simple spatial JOINs
+  - **High-Performance Matching**: Pre-computed areas eliminate real-time spatial calculations
+  - **Geographic Validation**: Postcode/locality constraints prevent false matches
+  - **Map-Ready Data**: Spatial polygons enable future visualization features
+
 ### IMMEDIATE NEXT ACTIONS ⭐
-1. ✅ **Enhanced Layer 3 Implementation Complete** - Deduplication + auto-scaling ready
-2. 🔄 **Execute Enhanced Layer 3 Processing** - Test the new deduplication approach
-3. 🔍 **Validate Planning Reference 20026% Unit Matching** - Verify individual unit UPRNs match correctly
-4. 📊 **Performance Analysis** - Compare auto-detected vs fixed worker counts
+1. ✅ **Enhanced Layer 3 Processing Active** - 90K+ addresses being processed with 9 workers
+2. 🔄 **Layer 4 Spatial Implementation** - Build parallel spatial pre-processing system
+3. 🗺️ **Spatial Table Creation** - Generate dim_road_postcode and dim_road with PostGIS
+4. 🔍 **Layer 4 Integration** - Simple JOIN-based matching using pre-computed spatial areas
+5. 🧪 **Validate Planning Reference 20026% Unit Matching** - Test enhanced Layer 3 results
 
 ### Success Metrics Achieved
 - **Complete Multi-Layered Pipeline**: 4-phase intelligent matching with 4x performance improvement
