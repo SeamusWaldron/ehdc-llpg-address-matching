@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,21 @@ import (
 )
 
 const version = "2.0.0-proper-algorithm"
+
+// getOptimalWorkerCount auto-detects the optimal number of parallel workers based on CPU cores
+func getOptimalWorkerCount() int {
+	numWorkers := runtime.NumCPU()
+	if numWorkers > 1 {
+		numWorkers = numWorkers - 1  // Reserve one core for system/database
+	}
+	if numWorkers > 16 {
+		numWorkers = 16  // Reasonable upper limit for database connections
+	}
+	if numWorkers < 2 {
+		numWorkers = 2  // Minimum for any meaningful parallelization
+	}
+	return numWorkers
+}
 
 func main() {
 	var (
@@ -99,6 +115,8 @@ func main() {
 		err = standardizeSourceAddresses(*debug, db)
 	case "comprehensive-match":
 		err = runComprehensiveMatching(*debug, db)
+	case "end-to-end-with-snapshots":
+		err = runEndToEndWithSnapshots(*debug, db)
 	case "conservative-only":
 		err = runConservativeMatching(*debug, db, "conservative-test")
 	case "clean-source-data":
@@ -109,20 +127,20 @@ func main() {
 		err = rebuildFactTable(*debug, db)
 	case "rebuild-fact-intelligent":
 		err = rebuildFactTableIntelligent(*debug, db)
-	case "rebuild-fact-simple":
-		err = rebuildFactTableSimple(*debug, db)
-	case "layer2-only":
-		err = runLayer2Only(*debug, db)
-	case "layer2-optimized":
-		err = runOptimizedLayer2(*debug, db)
-	case "layer2-parallel":
-		err = runParallelLayer2(*debug, db)
-	case "layer3-parallel-groups":
-		err = runParallelLayer3Groups(*debug, db)
-	case "layer3-parallel-docs":
-		err = runParallelLayer3Documents(*debug, db)
-	case "layer3-parallel-combined":
-		err = runParallelLayer3Combined(*debug, db)
+	// case "rebuild-fact-simple":
+	//	err = rebuildFactTableSimple(*debug, db)
+	// case "layer2-only":
+	//	err = runLayer2Only(*debug, db)
+	// case "layer2-optimized":
+	//	err = runOptimizedLayer2(*debug, db)
+	// case "layer2-parallel":
+	//	err = runParallelLayer2(*debug, db)
+	// case "layer3-parallel-groups":
+	//	err = runParallelLayer3Groups(*debug, db)
+	// case "layer3-parallel-docs":
+	//	err = runParallelLayer3Documents(*debug, db)
+	// case "layer3-parallel-combined":
+	//	err = runParallelLayer3Combined(*debug, db)
 	case "validate-integrity":
 		err = validateDataIntegrity(*debug, db)
 	case "stats":
@@ -2522,16 +2540,9 @@ func runComprehensiveMatching(localDebug bool, db *sql.DB) error {
 		return fmt.Errorf("layer 2 failed: %v", err)
 	}
 	
-	// Layer 3: Group-based fuzzy matching (for remaining unmatched)
-	fmt.Println("\n--- LAYER 3: Group-based Fuzzy Matching ---")
-	err = fuzzyMatchUnmatchedGroups(localDebug, db)
-	if err != nil {
-		return fmt.Errorf("layer 2 failed: %v", err)
-	}
-
-	// Layer 3: Individual document fuzzy matching
-	fmt.Println("\n--- LAYER 3: Individual Document Fuzzy Matching ---")
-	err = fuzzyMatchIndividualDocuments(localDebug, db)
+	// Layer 3: Enhanced parallel individual document fuzzy matching with address deduplication
+	fmt.Println("\n--- LAYER 3: Enhanced Parallel Fuzzy Matching ---")
+	err = parallelFuzzyMatchIndividualDocuments(localDebug, db)
 	if err != nil {
 		return fmt.Errorf("layer 3 failed: %v", err)
 	}
@@ -3308,5 +3319,99 @@ func cleanSourceAddressData(localDebug bool, db *sql.DB) error {
 	fmt.Printf("  ✓ Created %d enhanced canonical addresses\n", rowsAffected)
 	
 	fmt.Println("\n✓ Address data cleaning completed")
+	return nil
+}
+// runEndToEndWithSnapshots runs the complete multi-layered matching with snapshots after each layer
+func runEndToEndWithSnapshots(localDebug bool, db *sql.DB) error {
+	fmt.Println("Running end-to-end matching with layer snapshots...")
+	fmt.Println("============================================================")
+	
+	// Layer 0: Data Cleaning
+	fmt.Println("\n--- LAYER 0: Data Cleaning ---")
+	err := cleanSourceAddressData(localDebug, db)
+	if err != nil {
+		return fmt.Errorf("layer 0 failed: %v", err)
+	}
+	
+	// Layer 1: Intelligent Fact Table Population (includes Layer 1 snapshot)
+	fmt.Println("\n--- LAYER 1: Intelligent Fact Table Population ---")
+	err = rebuildFactTableIntelligent(localDebug, db)
+	if err != nil {
+		return fmt.Errorf("layer 1 failed: %v", err)
+	}
+	
+	// Layer 2: Conservative matching
+	fmt.Println("\n--- LAYER 2: Conservative Validation Matching ---")
+	err = runConservativeMatching(localDebug, db, "end-to-end-layer2")
+	if err != nil {
+		return fmt.Errorf("layer 2 failed: %v", err)
+	}
+	
+	// Create Layer 2 snapshot
+	fmt.Println("\n=== CREATING LAYER 2 SNAPSHOT ===")
+	err = createLayerSnapshot(localDebug, db, "layer_2")
+	if err != nil {
+		return fmt.Errorf("failed to create Layer 2 snapshot: %v", err)
+	}
+	
+	// Layer 3: Enhanced parallel individual document fuzzy matching 
+	fmt.Println("\n--- LAYER 3: Enhanced Parallel Fuzzy Matching ---")
+	err = parallelFuzzyMatchIndividualDocuments(localDebug, db)
+	if err != nil {
+		return fmt.Errorf("layer 3 failed: %v", err)
+	}
+	
+	// Create Layer 3 snapshot
+	fmt.Println("\n=== CREATING LAYER 3 SNAPSHOT ===")
+	err = createLayerSnapshot(localDebug, db, "layer_3")
+	if err != nil {
+		return fmt.Errorf("failed to create Layer 3 snapshot: %v", err)
+	}
+	
+	// Layer 4: Group consensus corrections
+	fmt.Println("\n--- LAYER 4: Group Consensus Corrections ---")
+	err = applyGroupConsensusCorrections(localDebug, db)
+	if err != nil {
+		return fmt.Errorf("layer 4 failed: %v", err)
+	}
+	
+	// Create Layer 4 snapshot
+	fmt.Println("\n=== CREATING LAYER 4 SNAPSHOT ===")
+	err = createLayerSnapshot(localDebug, db, "layer_4")
+	if err != nil {
+		return fmt.Errorf("failed to create Layer 4 snapshot: %v", err)
+	}
+	
+	// Summary statistics
+	fmt.Println("\n--- FINAL STATISTICS ---")
+	err = showStatistics(localDebug, db)
+	if err != nil {
+		fmt.Printf("Warning: failed to show final statistics: %v\n", err)
+	}
+	
+	// Show snapshot summary
+	fmt.Println("\n--- LAYER SNAPSHOT SUMMARY ---")
+	snapshots := []string{"layer_1", "layer_2", "layer_3", "layer_4"}
+	for _, snapshot := range snapshots {
+		var count int
+		var matched int
+		tableName := fmt.Sprintf("snapshot_fact_documents_lean_%s", snapshot)
+		
+		countSQL := fmt.Sprintf("SELECT COUNT(*), COUNT(*) FILTER (WHERE matched_address_id IS NOT NULL) FROM %s", tableName)
+		err := db.QueryRow(countSQL).Scan(&count, &matched)
+		if err == nil {
+			matchRate := float64(matched) / float64(count) * 100
+			fmt.Printf("  %s: %d total, %d matched (%.1f%%)\n", snapshot, count, matched, matchRate)
+		}
+	}
+	
+	fmt.Println("\n============================================================")
+	fmt.Println("End-to-end matching with snapshots completed!")
+	fmt.Println("Use the snapshot tables and cross-layer views to analyze results:")
+	for _, snapshot := range snapshots {
+		fmt.Printf("  snapshot_fact_documents_lean_%s\n", snapshot)
+	}
+	fmt.Println("  vw_fact_documents_cross_layer (unified analysis view)")
+	
 	return nil
 }

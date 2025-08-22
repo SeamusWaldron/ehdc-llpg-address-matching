@@ -99,7 +99,7 @@ func runParallelLayer2(localDebug bool, db *sql.DB) error {
 	
 	// Create batches for parallel processing
 	batchSize := 100  // Process 100 addresses per batch
-	numWorkers := 4   // Use 4 parallel workers
+	numWorkers := getOptimalWorkerCount()  // Auto-detect optimal worker count
 	
 	batches := createAddressBatches(allAddresses, batchSize)
 	fmt.Printf("Created %d batches of ~%d addresses each for %d parallel workers\n", 
@@ -292,7 +292,7 @@ func runParallelLayer2WithConnectionPool(localDebug bool, db *sql.DB) error {
 	fmt.Println("Running Enhanced Parallel Layer 2 with Connection Pooling...")
 	fmt.Println("===========================================================")
 	
-	numWorkers := 6  // Increase workers with dedicated connections
+	numWorkers := getOptimalWorkerCount()  // Auto-detect optimal worker count
 	
 	// Create dedicated connection pool
 	connections, err := createConnectionPool(db, numWorkers)

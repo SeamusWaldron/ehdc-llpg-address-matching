@@ -109,18 +109,25 @@
 
 #### Performance Optimizations ✅
 - **Materialized Combined Address Table**: 74,917 searchable addresses (original + expanded)
-- **Parallel Processing**: 4 workers with dedicated connection pools
+- **Auto-Detected Parallel Processing**: CPU core-based scaling with intelligent worker allocation
 - **Optimized Indexing**: GIN indexes for canonical addresses and trigram matching
 - **Distinct Address Processing**: Eliminates duplicate work, batch updates for efficiency
 
+#### Latest Enhancements ✅ (Current Session)
+- ✅ **Enhanced Layer 3 Implementation**: Replaced problematic Layer 3a group matching with optimized Layer 3b
+  - **Address Deduplication**: Process each unique address only once, apply to all matching documents
+  - **Auto-Detected Worker Count**: Dynamic CPU core detection for optimal parallel performance
+  - **Improved Architecture**: Removed Layer 3a group logic causing "all Unit 10" matching issues
+- ✅ **CPU Core Auto-Detection**: Implemented across all parallel processing layers
+  - **Smart Scaling**: `runtime.NumCPU()` with system-reserved cores and reasonable limits
+  - **Applied To**: parallel_layer2.go, parallel_layer3.go, enhanced_layer3.go
+  - **Performance**: Automatic scaling from 4-core dev machines to 16+ core production servers
+
 ### IMMEDIATE NEXT ACTIONS ⭐
-1. ✅ **Layer 3 Parallel Processing Implementation Complete** - Production-ready fuzzy matching
-   - Layer 3a: Group-based fuzzy matching with optimized batch processing
-   - Layer 3b: Individual document fuzzy matching with performance tuning
-   - No timeout restrictions, unlimited record processing capability
-2. 🔄 **Execute Complete Layer 3 Processing** - Process all remaining unmatched records
-3. 🔍 **Validate Planning Reference 20026%** - Test specific group matching success
-4. 📊 **Gap Analysis** - Comprehensive analysis of remaining unmatched data patterns
+1. ✅ **Enhanced Layer 3 Implementation Complete** - Deduplication + auto-scaling ready
+2. 🔄 **Execute Enhanced Layer 3 Processing** - Test the new deduplication approach
+3. 🔍 **Validate Planning Reference 20026% Unit Matching** - Verify individual unit UPRNs match correctly
+4. 📊 **Performance Analysis** - Compare auto-detected vs fixed worker counts
 
 ### Success Metrics Achieved
 - **Complete Multi-Layered Pipeline**: 4-phase intelligent matching with 4x performance improvement

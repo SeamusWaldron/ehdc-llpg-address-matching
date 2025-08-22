@@ -5,6 +5,42 @@ import (
 	"fmt"
 )
 
+// createLayerSnapshot creates a complete snapshot of the fact table after each layer
+func createLayerSnapshot(localDebug bool, db *sql.DB, layerName string) error {
+	snapshotTable := fmt.Sprintf("snapshot_fact_documents_lean_%s", layerName)
+	
+	fmt.Printf("Creating snapshot: %s\n", snapshotTable)
+	
+	// Drop existing snapshot table if it exists
+	dropSQL := fmt.Sprintf("DROP TABLE IF EXISTS %s", snapshotTable)
+	_, err := db.Exec(dropSQL)
+	if err != nil {
+		return fmt.Errorf("failed to drop existing snapshot table %s: %v", snapshotTable, err)
+	}
+	
+	// Create new snapshot table with complete copy
+	createSQL := fmt.Sprintf(`
+		CREATE TABLE %s AS 
+		SELECT * FROM fact_documents_lean
+	`, snapshotTable)
+	
+	_, err = db.Exec(createSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot table %s: %v", snapshotTable, err)
+	}
+	
+	// Get row count
+	var count int
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s", snapshotTable)
+	err = db.QueryRow(countSQL).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to count snapshot rows: %v", err)
+	}
+	
+	fmt.Printf("✓ Created snapshot %s with %d records\n", snapshotTable, count)
+	return nil
+}
+
 // rebuildFactTableIntelligent implements the intelligent fact table population strategy
 // Phase 1: Insert records with UPRN matches
 // Phase 2: Insert records with canonical address matches  
@@ -52,7 +88,7 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		matched_address_id, match_method_id, match_confidence_score, 
 		property_type_id, application_status_id, development_type_id,
 		application_date_id, decision_date_id, import_date_id, 
-		match_decision_id, matched_location_id
+		match_decision_id, matched_location_id, planning_reference
 	)
 	SELECT DISTINCT ON (s.document_id)
 		s.document_id,
@@ -72,7 +108,12 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		NULL::INTEGER as decision_date_id,
 		TO_CHAR(CURRENT_DATE, 'YYYYMMDD')::INTEGER as import_date_id,
 		2 as match_decision_id,  -- "Accepted"
-		da.location_id as matched_location_id
+		da.location_id as matched_location_id,
+		CASE 
+		WHEN s.planning_app_sequence IS NOT NULL AND s.planning_app_sequence != '' 
+		THEN s.planning_app_base || '/' || s.planning_app_sequence
+		ELSE s.planning_app_base
+	END as planning_reference
 	FROM src_document s
 	INNER JOIN dim_original_address oa ON oa.raw_address = s.raw_address
 	INNER JOIN dim_address da ON da.uprn = s.raw_uprn  -- UPRN MATCH
@@ -113,7 +154,7 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		matched_address_id, match_method_id, match_confidence_score,
 		property_type_id, application_status_id, development_type_id,
 		application_date_id, decision_date_id, import_date_id,
-		match_decision_id, matched_location_id
+		match_decision_id, matched_location_id, planning_reference
 	)
 	SELECT DISTINCT ON (s.document_id)
 		s.document_id,
@@ -133,7 +174,12 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		NULL::INTEGER as decision_date_id,
 		TO_CHAR(CURRENT_DATE, 'YYYYMMDD')::INTEGER as import_date_id,
 		2 as match_decision_id,  -- "Accepted"
-		da.location_id as matched_location_id
+		da.location_id as matched_location_id,
+		CASE 
+		WHEN s.planning_app_sequence IS NOT NULL AND s.planning_app_sequence != '' 
+		THEN s.planning_app_base || '/' || s.planning_app_sequence
+		ELSE s.planning_app_base
+	END as planning_reference
 	FROM src_document s
 	INNER JOIN dim_original_address oa ON oa.raw_address = s.raw_address
 	INNER JOIN dim_address da ON 
@@ -165,7 +211,7 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		matched_address_id, match_method_id, match_confidence_score,
 		property_type_id, application_status_id, development_type_id,
 		application_date_id, decision_date_id, import_date_id,
-		match_decision_id, matched_location_id
+		match_decision_id, matched_location_id, planning_reference
 	)
 	SELECT DISTINCT ON (s.document_id)
 		s.document_id,
@@ -185,7 +231,12 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		NULL::INTEGER as decision_date_id,
 		TO_CHAR(CURRENT_DATE, 'YYYYMMDD')::INTEGER as import_date_id,
 		2 as match_decision_id,  -- "Accepted"
-		da.location_id as matched_location_id
+		da.location_id as matched_location_id,
+		CASE 
+		WHEN s.planning_app_sequence IS NOT NULL AND s.planning_app_sequence != '' 
+		THEN s.planning_app_base || '/' || s.planning_app_sequence
+		ELSE s.planning_app_base
+	END as planning_reference
 	FROM src_document s
 	INNER JOIN dim_original_address oa ON oa.raw_address = s.raw_address
 	INNER JOIN dim_address_expanded dae ON 
@@ -233,9 +284,9 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		matched_address_id, match_method_id, match_confidence_score,
 		property_type_id, application_status_id, development_type_id,
 		application_date_id, decision_date_id, import_date_id,
-		match_decision_id, matched_location_id
+		match_decision_id, matched_location_id, planning_reference
 	)
-	SELECT DISTINCT
+	SELECT DISTINCT ON (s.document_id)
 		s.document_id,
 		COALESCE(s.doc_type_id, 1) as doc_type_id,
 		1 as document_status_id,
@@ -253,10 +304,16 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 		NULL::INTEGER as decision_date_id,
 		TO_CHAR(CURRENT_DATE, 'YYYYMMDD')::INTEGER as import_date_id,
 		1 as match_decision_id,  -- "Pending"
-		NULL::INTEGER as matched_location_id
+		NULL::INTEGER as matched_location_id,
+		CASE 
+		WHEN s.planning_app_sequence IS NOT NULL AND s.planning_app_sequence != '' 
+		THEN s.planning_app_base || '/' || s.planning_app_sequence
+		ELSE s.planning_app_base
+	END as planning_reference
 	FROM src_document s
 	INNER JOIN dim_original_address oa ON oa.raw_address = s.raw_address
 	WHERE NOT EXISTS (SELECT 1 FROM fact_documents_lean f WHERE f.document_id = s.document_id)  -- Not already inserted
+	ORDER BY s.document_id, oa.original_address_id
 	`
 	
 	result, err = db.Exec(unmatchedQuery)
@@ -333,6 +390,13 @@ func rebuildFactTableIntelligent(localDebug bool, db *sql.DB) error {
 				}
 			}
 		}
+	}
+	
+	// Create Layer 1 snapshot after intelligent fact table population
+	fmt.Println("\n=== CREATING LAYER 1 SNAPSHOT ===")
+	err = createLayerSnapshot(localDebug, db, "layer_1")
+	if err != nil {
+		return fmt.Errorf("failed to create Layer 1 snapshot: %v", err)
 	}
 	
 	return nil

@@ -123,7 +123,7 @@ func runParallelLayer3Groups(localDebug bool, db *sql.DB) error {
 
 	// Step 3: Create batches for parallel processing
 	batchSize := 50  // Process 50 groups per batch for production (optimized for throughput)
-	numWorkers := 4  // Use 4 parallel workers
+	numWorkers := getOptimalWorkerCount()  // Auto-detect optimal worker count
 	
 	batches := createGroupBatches(unmatchedGroups, batchSize)
 	fmt.Printf("Created %d batches of ~%d groups each for %d parallel workers\n", 
@@ -244,7 +244,7 @@ func runParallelLayer3Documents(localDebug bool, db *sql.DB) error {
 
 	// Step 2: Create batches for parallel processing
 	batchSize := 100  // Process 100 documents per batch for production (optimized for throughput)
-	numWorkers := 4   // Use 4 parallel workers
+	numWorkers := getOptimalWorkerCount()  // Auto-detect optimal worker count
 	
 	batches := createDocumentBatches(unmatchedDocs, batchSize)
 	fmt.Printf("Created %d batches of ~%d documents each for %d parallel workers\n", 
