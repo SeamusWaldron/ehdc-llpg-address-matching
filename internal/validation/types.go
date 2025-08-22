@@ -174,8 +174,8 @@ func DefaultParsingConfig() ParsingConfig {
 			`(?i)\b(TRADING\s+ESTATE?)\b`,
 		},
 		UKUnitPatterns: []string{
-			`(?i)\b(UNIT\s+\d+[A-Z]?)\b`,
-			`(?i)\b(UNITS?\s+\d+[A-Z]?[-/]\d+[A-Z]?)\b`,
+			`(?i)\b(UNIT[,\s]+\d+[A-Z]?)\b`,
+			`(?i)\b(UNITS?[,\s]+\d+[A-Z]?[-/]\d+[A-Z]?)\b`,
 		},
 		UKFlatPatterns: []string{
 			`(?i)\b(FLAT\s+[A-Z0-9]+)\b`,

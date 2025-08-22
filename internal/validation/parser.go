@@ -25,8 +25,8 @@ func NewAddressParser() *AddressParser {
 	
 	return &AddressParser{
 		config:          config,
-		unitPattern:     regexp.MustCompile(`(?i)\b(UNIT\s+\d+[A-Z]?)\b`),
-		flatPattern:     regexp.MustCompile(`(?i)\b(FLAT\s+[A-Z0-9]+)\b`),
+		unitPattern:     regexp.MustCompile(`(?i)\b(UNIT[,\s]+\d+[A-Z]?)\b`),
+		flatPattern:     regexp.MustCompile(`(?i)\b(FLAT[,\s]+[A-Z0-9]+)\b`),
 		estatePattern:   regexp.MustCompile(`(?i)\b(INDUSTRIAL\s+ESTATE?|IND\s+EST)\b`),
 		postcodePattern: regexp.MustCompile(`(?i)\b([A-Z]{1,2}\d{1,2}[A-Z]?\s*\d[A-Z]{2})\b`),
 		houseNumPattern: regexp.MustCompile(`(?i)^\s*(\d+[A-Z]?)\b`),
@@ -103,9 +103,9 @@ func (p *AddressParser) parseWithGopostal(address string) AddressComponents {
 	
 	// Look for unit patterns first
 	if unitMatch := p.unitPattern.FindString(upperAddr); unitMatch != "" {
-		components.HouseNumber = strings.TrimSpace(unitMatch)
+		components.HouseNumber = p.normalizeUnitNumber(strings.TrimSpace(unitMatch))
 	} else if flatMatch := p.flatPattern.FindString(upperAddr); flatMatch != "" {
-		components.HouseNumber = strings.TrimSpace(flatMatch)
+		components.HouseNumber = p.normalizeFlatNumber(strings.TrimSpace(flatMatch))
 	} else if houseMatch := p.houseNumPattern.FindStringSubmatch(address); len(houseMatch) > 1 {
 		components.HouseNumber = strings.TrimSpace(houseMatch[1])
 	}
@@ -141,15 +141,29 @@ func (p *AddressParser) parseWithGopostal(address string) AddressComponents {
 	var streetParts []string
 	var localityParts []string
 	
-	// Heuristic: last 1-2 parts are likely locality, rest are street
+	// Improved heuristic: check for street vs locality indicators
 	for i, part := range parts {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
 		
-		// If it looks like a locality (short, common place names)
-		if i >= len(parts)-2 && (len(part) <= 15 || p.looksLikeLocality(part)) {
+		// Check if this part contains street indicators
+		upperPart := strings.ToUpper(part)
+		streetIndicators := []string{"ROAD", "STREET", "LANE", "AVENUE", "DRIVE", "CLOSE", "COURT", "PLACE", "WAY", "ESTATE", "INDUSTRIAL"}
+		hasStreetIndicator := false
+		for _, indicator := range streetIndicators {
+			if strings.Contains(upperPart, indicator) {
+				hasStreetIndicator = true
+				break
+			}
+		}
+		
+		// If it has street indicators, it's part of the street
+		// Otherwise, use original heuristic for locality
+		if hasStreetIndicator {
+			streetParts = append(streetParts, part)
+		} else if i >= len(parts)-2 && (len(part) <= 15 || p.looksLikeLocality(part)) {
 			localityParts = append(localityParts, part)
 		} else {
 			streetParts = append(streetParts, part)
@@ -394,6 +408,19 @@ func (p *AddressParser) NormalizeAddressComponents(components AddressComponents)
 func (p *AddressParser) normalizeStreetName(street string) string {
 	normalized := strings.ToUpper(strings.TrimSpace(street))
 	
+	// Remove unit/flat identifiers from street names for comparison
+	// Patterns like "UNIT, 2", "FLAT A", etc. should be removed from street names
+	unitRemovePatterns := []string{
+		`(?i)\bUNIT[,\s]+\d+[A-Z]?\b[,\s]*`,
+		`(?i)\bFLAT[,\s]+[A-Z0-9]+\b[,\s]*`,
+		`(?i)\bSUITE[,\s]+\d+[A-Z]?\b[,\s]*`,
+	}
+	
+	for _, pattern := range unitRemovePatterns {
+		re := regexp.MustCompile(pattern)
+		normalized = re.ReplaceAllString(normalized, "")
+	}
+	
 	// Apply abbreviation expansions
 	for abbrev, full := range p.config.StreetTypeAbbreviations {
 		pattern := fmt.Sprintf(`\b%s\b`, regexp.QuoteMeta(abbrev))
@@ -401,8 +428,10 @@ func (p *AddressParser) normalizeStreetName(street string) string {
 		normalized = re.ReplaceAllString(normalized, full)
 	}
 	
-	// Normalize spacing
+	// Normalize spacing and remove extra commas
+	normalized = regexp.MustCompile(`\s*,\s*`).ReplaceAllString(normalized, ", ")
 	normalized = regexp.MustCompile(`\s+`).ReplaceAllString(normalized, " ")
+	normalized = regexp.MustCompile(`^[,\s]+|[,\s]+$`).ReplaceAllString(normalized, "")
 	
 	return strings.TrimSpace(normalized)
 }
@@ -447,4 +476,25 @@ func (p *AddressParser) looksLikeLocality(part string) bool {
 	}
 	
 	return false
+}
+
+// normalizeUnitNumber extracts and normalizes unit numbers from patterns like "UNIT, 2" or "UNIT 2"
+func (p *AddressParser) normalizeUnitNumber(unitMatch string) string {
+	// Extract just the number part from "UNIT, 2" or "UNIT 2"
+	numberPattern := regexp.MustCompile(`(\d+[A-Z]?)`)
+	if match := numberPattern.FindString(unitMatch); match != "" {
+		return match
+	}
+	return unitMatch // fallback to original if no number found
+}
+
+// normalizeFlatNumber extracts and normalizes flat numbers from patterns like "FLAT, A" or "FLAT A"
+func (p *AddressParser) normalizeFlatNumber(flatMatch string) string {
+	// Extract just the identifier part from "FLAT, A" or "FLAT 12"
+	idPattern := regexp.MustCompile(`([A-Z0-9]+)`)
+	matches := idPattern.FindAllString(flatMatch, -1)
+	if len(matches) > 1 {
+		return matches[1] // Return the second match (the identifier, not "FLAT")
+	}
+	return flatMatch // fallback to original if no identifier found
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/ehdc-llpg/internal/debug"
 	"github.com/ehdc-llpg/internal/embeddings"
 	"github.com/ehdc-llpg/internal/etl"
+	"github.com/ehdc-llpg/internal/llpg"
 	"github.com/ehdc-llpg/internal/match"
 	"github.com/ehdc-llpg/internal/phonetics"
 	"github.com/ehdc-llpg/internal/validation"
@@ -32,7 +33,7 @@ const version = "2.0.0-proper-algorithm"
 
 func main() {
 	var (
-		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
+		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
 		llpgFile    = flag.String("llpg", "", "Path to LLPG CSV file")
 		osUprnFile  = flag.String("os-uprn", "", "Path to OS Open UPRN CSV file")
 		sourceFiles = flag.String("sources", "", "Comma-separated paths to source CSV files (type:path,type:path)")
@@ -78,6 +79,8 @@ func main() {
 		err = loadSourceDocuments(*debug, db, *sourceFiles)
 	case "validate-uprns":
 		err = validateUPRNs(*debug, db)
+	case "expand-llpg-ranges":
+		err = expandLLPGRanges(*debug, db)
 	case "setup-vector":
 		err = setupVectorDB(*debug, db)
 	case "match-batch":
@@ -96,10 +99,24 @@ func main() {
 		err = standardizeSourceAddresses(*debug, db)
 	case "comprehensive-match":
 		err = runComprehensiveMatching(*debug, db)
+	case "conservative-only":
+		err = runConservativeMatching(*debug, db, "conservative-test")
+	case "clean-source-data":
+		err = cleanSourceAddressData(*debug, db)
 	case "llm-fix-addresses":
 		err = llmFixLowConfidenceAddresses(*debug, db)
 	case "rebuild-fact":
 		err = rebuildFactTable(*debug, db)
+	case "rebuild-fact-intelligent":
+		err = rebuildFactTableIntelligent(*debug, db)
+	case "rebuild-fact-simple":
+		err = rebuildFactTableSimple(*debug, db)
+	case "layer2-only":
+		err = runLayer2Only(*debug, db)
+	case "layer2-optimized":
+		err = runOptimizedLayer2(*debug, db)
+	case "layer2-parallel":
+		err = runParallelLayer2(*debug, db)
 	case "validate-integrity":
 		err = validateDataIntegrity(*debug, db)
 	case "stats":
@@ -177,12 +194,16 @@ func printUsage() {
 }
 
 func connectDB() (*sql.DB, error) {
-	host := config.GetEnv("DB_HOST", "localhost")
-	port := config.GetEnv("DB_PORT", "5432")
-	user := config.GetEnv("DB_USER", "postgres")
-	password := config.GetEnv("DB_PASSWORD", "postgres")
-	dbname := config.GetEnv("DB_NAME", "ehdc_llpg")
+	host := config.GetEnv("DB_HOST", "")
+	port := config.GetEnv("DB_PORT", "")
+	user := config.GetEnv("DB_USER", "")
+	password := config.GetEnv("DB_PASSWORD", "")
+	dbname := config.GetEnv("DB_NAME", "")
 	sslmode := config.GetEnv("DB_SSLMODE", "disable")
+
+	if host == "" || port == "" || user == "" || password == "" || dbname == "" {
+		return nil, fmt.Errorf("missing required database environment variables: DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME")
+	}
 
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, user, password, dbname, sslmode)
@@ -2465,15 +2486,29 @@ func runComprehensiveMatching(localDebug bool, db *sql.DB) error {
 	fmt.Println("Running comprehensive multi-layered matching strategy...")
 	fmt.Println("=======================================================")
 
-	// Layer 1: Address Standardization
-	fmt.Println("\n--- LAYER 1: Address Standardization ---")
-	err := standardizeSourceAddresses(localDebug, db)
+	// Layer 0: Data Cleaning (NEW)
+	fmt.Println("\n--- LAYER 0: Data Cleaning ---")
+	err := cleanSourceAddressData(localDebug, db)
+	if err != nil {
+		return fmt.Errorf("layer 0 failed: %v", err)
+	}
+
+	// Layer 1: Intelligent Fact Table Population (REDESIGNED)
+	fmt.Println("\n--- LAYER 1: Intelligent Fact Table Population ---")
+	err = rebuildFactTableIntelligent(localDebug, db)
 	if err != nil {
 		return fmt.Errorf("layer 1 failed: %v", err)
 	}
 
-	// Layer 2: Group-based fuzzy matching (existing - already improved)
-	fmt.Println("\n--- LAYER 2: Group-based Fuzzy Matching ---")
+	// Layer 2: Conservative matching (high-precision deterministic first)
+	fmt.Println("\n--- LAYER 2: Conservative Validation Matching ---")
+	err = runConservativeMatching(localDebug, db, "comprehensive-conservative")
+	if err != nil {
+		return fmt.Errorf("layer 2 failed: %v", err)
+	}
+	
+	// Layer 3: Group-based fuzzy matching (for remaining unmatched)
+	fmt.Println("\n--- LAYER 3: Group-based Fuzzy Matching ---")
 	err = fuzzyMatchUnmatchedGroups(localDebug, db)
 	if err != nil {
 		return fmt.Errorf("layer 2 failed: %v", err)
@@ -2515,88 +2550,20 @@ func runConservativeMatching(localDebug bool, db *sql.DB, runLabel string) error
 	// Initialize the address validator
 	validator := validation.NewAddressValidator()
 
-	// Get representative sample from all source types for large test (simplified approach)
+	// Process ALL unmatched records for production run
 	query := `
-		WITH stratified_sample AS (
-			(-- Decision Notice: 6,330 records
-			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
-			FROM fact_documents_lean f
-			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-			LEFT JOIN src_document s ON f.document_id = s.document_id
-			WHERE f.matched_address_id IS NULL 
-				AND o.raw_address IS NOT NULL 
-				AND o.raw_address != ''
-				AND dt.type_name = 'Decision Notice'
-			ORDER BY RANDOM()
-			LIMIT 100)
-			
-			UNION ALL
-			
-			(-- Land Charge: 3,350 records  
-			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
-			FROM fact_documents_lean f
-			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-			LEFT JOIN src_document s ON f.document_id = s.document_id
-			WHERE f.matched_address_id IS NULL 
-				AND o.raw_address IS NOT NULL 
-				AND o.raw_address != ''
-				AND dt.type_name = 'Land Charge'
-			ORDER BY RANDOM()
-			LIMIT 50)
-			
-			UNION ALL
-			
-			(-- Agreement: 220 records
-			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
-			FROM fact_documents_lean f
-			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-			LEFT JOIN src_document s ON f.document_id = s.document_id
-			WHERE f.matched_address_id IS NULL 
-				AND o.raw_address IS NOT NULL 
-				AND o.raw_address != ''
-				AND dt.type_name = 'Agreement'
-			ORDER BY RANDOM()
-			LIMIT 20)
-			
-			UNION ALL
-			
-			(-- Enforcement Notice: 90 records
-			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
-			FROM fact_documents_lean f
-			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-			LEFT JOIN src_document s ON f.document_id = s.document_id
-			WHERE f.matched_address_id IS NULL 
-				AND o.raw_address IS NOT NULL 
-				AND o.raw_address != ''
-				AND dt.type_name = 'Enforcement Notice'
-			ORDER BY RANDOM()
-			LIMIT 10)
-			
-			UNION ALL
-			
-			(-- Street Name and Numbering: 10 records
-			SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
-			FROM fact_documents_lean f
-			JOIN dim_original_address o ON f.original_address_id = o.original_address_id
-			JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
-			LEFT JOIN src_document s ON f.document_id = s.document_id
-			WHERE f.matched_address_id IS NULL 
-				AND o.raw_address IS NOT NULL 
-				AND o.raw_address != ''
-				AND dt.type_name = 'Street Name and Numbering'
-			ORDER BY RANDOM()
-			LIMIT 5)
-		)
-		SELECT fact_id, document_id, raw_address, source_type, raw_uprn
-		FROM stratified_sample
+		SELECT f.fact_id, f.document_id, o.raw_address, dt.type_name as source_type, s.raw_uprn
+		FROM fact_documents_lean f
+		JOIN dim_original_address o ON f.original_address_id = o.original_address_id
+		JOIN dim_document_type dt ON f.doc_type_id = dt.doc_type_id
+		LEFT JOIN src_document s ON f.document_id = s.document_id
+		WHERE f.matched_address_id IS NULL 
+			AND o.raw_address IS NOT NULL 
+			AND o.raw_address != ''
 		ORDER BY 
 			-- Process documents with source UPRNs first
-			CASE WHEN raw_uprn IS NOT NULL AND raw_uprn != '' THEN 0 ELSE 1 END,
-			source_type, document_id
+			CASE WHEN s.raw_uprn IS NOT NULL AND s.raw_uprn != '' THEN 0 ELSE 1 END,
+			dt.type_name, f.document_id
 	`
 
 	rows, err := db.Query(query)
@@ -2789,7 +2756,16 @@ func (v *runConservativeMatchingContext) findBestMatchOptimized(db *sql.DB, sour
 		return nil, validation.MatchDecision{Accept: false, Reason: "Source address validation failed"}, nil
 	}
 	
-	// STRATEGY 1: Exact component matching (most precise)
+	// STRATEGY 1: Canonical address matching (most reliable)
+	match, decision, err := v.tryCanonicalAddressMatch(db, sourceAddress, validator, debug)
+	if err != nil {
+		return nil, validation.MatchDecision{}, err
+	}
+	if match != nil && decision.Accept {
+		return match, decision, nil
+	}
+	
+	// STRATEGY 2: Exact component matching (fallback)
 	if components.HasHouseNumber() && components.HasStreet() {
 		match, decision, err := v.tryExactComponentMatch(db, components, validator, debug)
 		if err != nil {
@@ -2800,7 +2776,7 @@ func (v *runConservativeMatchingContext) findBestMatchOptimized(db *sql.DB, sour
 		}
 	}
 	
-	// STRATEGY 2: Postcode + House Number matching (high precision)
+	// STRATEGY 3: Postcode + House Number matching (high precision)
 	if components.HasHouseNumber() && components.HasValidPostcode() {
 		match, decision, err := v.tryPostcodeHouseMatch(db, components, validator, debug)
 		if err != nil {
@@ -2811,7 +2787,7 @@ func (v *runConservativeMatchingContext) findBestMatchOptimized(db *sql.DB, sour
 		}
 	}
 	
-	// STRATEGY 3: Street similarity matching (medium precision)
+	// STRATEGY 4: Street similarity matching (medium precision)
 	if components.HasStreet() {
 		match, decision, err := v.tryStreetSimilarityMatch(db, components, validator, debug)
 		if err != nil {
@@ -2830,22 +2806,132 @@ func (v *runConservativeMatchingContext) findBestMatchOptimized(db *sql.DB, sour
 	}, nil
 }
 
+// tryCanonicalAddressMatch uses canonical address similarity for precise matching
+func (v *runConservativeMatchingContext) tryCanonicalAddressMatch(db *sql.DB, sourceAddress string, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	// Normalize source address to canonical form
+	sourceCanonical := strings.ToUpper(strings.TrimSpace(sourceAddress))
+	// Remove punctuation and extra spaces
+	sourceCanonical = regexp.MustCompile(`[^\w\s]`).ReplaceAllString(sourceCanonical, "")
+	sourceCanonical = regexp.MustCompile(`\s+`).ReplaceAllString(sourceCanonical, " ")
+	sourceCanonical = strings.TrimSpace(sourceCanonical)
+	
+	if debug {
+		fmt.Printf("Canonical address search for: '%s' (from: '%s')\n", sourceCanonical, sourceAddress)
+	}
+	
+	// Query both original and expanded addresses using canonical similarity
+	query := `
+	SELECT address_id, uprn, full_address, address_canonical, source_type, 
+	       similarity(UPPER(address_canonical), $1) as sim_score
+	FROM (
+		(SELECT a.address_id, a.uprn, a.full_address, a.address_canonical, 'original' as source_type
+		 FROM dim_address a
+		 WHERE a.uprn IS NOT NULL
+		   AND a.full_address IS NOT NULL
+		   AND a.address_canonical IS NOT NULL
+		   AND similarity(UPPER(a.address_canonical), $1) >= 0.5)
+		UNION ALL
+		(SELECT e.original_address_id, e.uprn, e.full_address, e.address_canonical, 'expanded' as source_type
+		 FROM dim_address_expanded e
+		 WHERE e.uprn IS NOT NULL
+		   AND e.full_address IS NOT NULL
+		   AND e.address_canonical IS NOT NULL
+		   AND similarity(UPPER(e.address_canonical), $1) >= 0.5)
+	) combined
+	ORDER BY 
+		-- Prefer expanded addresses, then by similarity
+		CASE WHEN source_type = 'expanded' THEN 0 ELSE 1 END,
+		sim_score DESC,
+		LENGTH(full_address),
+		address_id
+	LIMIT 5
+	`
+	
+	rows, err := db.Query(query, sourceCanonical)
+	if err != nil {
+		return nil, validation.MatchDecision{}, fmt.Errorf("canonical address query failed: %v", err)
+	}
+	defer rows.Close()
+	
+	var candidates []struct {
+		OptimizedMatch
+		SimScore float64
+		Canonical string
+		SourceType string
+	}
+	
+	for rows.Next() {
+		var candidate struct {
+			OptimizedMatch
+			SimScore float64
+			Canonical string
+			SourceType string
+		}
+		
+		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address, 
+			&candidate.Canonical, &candidate.SourceType, &candidate.SimScore)
+		if err != nil {
+			continue
+		}
+		
+		candidates = append(candidates, candidate)
+		
+		if debug {
+			fmt.Printf("  Candidate: %s (sim: %.3f, canonical: %s)\n", 
+				candidate.Address, candidate.SimScore, candidate.Canonical)
+		}
+	}
+	
+	if len(candidates) == 0 {
+		if debug {
+			fmt.Printf("  No canonical matches found for: '%s'\n", sourceAddress)
+		}
+		return nil, validation.MatchDecision{Accept: false, Reason: "No canonical similarity matches"}, nil
+	}
+	
+	// Validate the best candidate
+	bestCandidate := candidates[0]
+	
+	// Use conservative validation criteria for canonical matches
+	validationResult := validator.MakeMatchDecision(sourceAddress, bestCandidate.Address)
+	
+	if debug {
+		fmt.Printf("  Best canonical match validation: accept=%v, confidence=%.3f\n", 
+			validationResult.Accept, validationResult.Confidence)
+	}
+	
+	if validationResult.Accept {
+		return &bestCandidate.OptimizedMatch, validationResult, nil
+	}
+	
+	return nil, validationResult, nil
+}
+
 // tryExactComponentMatch looks for exact house number + street matches
 func (v *runConservativeMatchingContext) tryExactComponentMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	// Option A: Query both original addresses AND expanded addresses
 	query := `
-		SELECT da.address_id, da.uprn, da.full_address
-		FROM dim_address da
-		WHERE da.is_historic = false
-			AND da.uprn IS NOT NULL
-			AND da.full_address IS NOT NULL
-			-- Use database text search for efficiency
-			AND UPPER(da.full_address) LIKE '%' || $1 || '%'  -- House number
-			AND UPPER(da.full_address) LIKE '%' || $2 || '%'  -- Street
-		ORDER BY 
-			-- Prefer shorter addresses (more likely to be exact matches)
-			LENGTH(da.full_address),
-			da.address_id
-		LIMIT 10
+	SELECT address_id, uprn, full_address, source_type FROM (
+		(SELECT a.address_id, a.uprn, a.full_address, 'original' as source_type
+		 FROM dim_address a
+		 WHERE a.uprn IS NOT NULL
+		   AND a.full_address IS NOT NULL
+		   AND UPPER(a.full_address) LIKE '%' || $1 || '%'
+		   AND UPPER(a.full_address) LIKE '%' || $2 || '%')
+		UNION ALL
+		(SELECT e.original_address_id, e.uprn, e.full_address, 'expanded' as source_type
+		 FROM dim_address_expanded e
+		 WHERE e.uprn IS NOT NULL
+		   AND e.full_address IS NOT NULL
+		   AND UPPER(e.full_address) LIKE '%' || $1 || '%'
+		   AND UPPER(e.full_address) LIKE '%' || $2 || '%')
+	) combined
+	ORDER BY 
+		-- Prefer expanded addresses, then shorter addresses
+		CASE WHEN source_type = 'expanded' THEN 0 ELSE 1 END,
+		LENGTH(full_address),
+		address_id
+	LIMIT 10
 	`
 	
 	houseNum := strings.ToUpper(strings.TrimSpace(components.HouseNumber))
@@ -2853,6 +2939,7 @@ func (v *runConservativeMatchingContext) tryExactComponentMatch(db *sql.DB, comp
 	
 	if debug {
 		fmt.Printf("Exact component search: house='%s', street='%s'\n", houseNum, street)
+		fmt.Printf("SQL Query: %s\n", query)
 	}
 	
 	rows, err := db.Query(query, houseNum, street)
@@ -2866,15 +2953,25 @@ func (v *runConservativeMatchingContext) tryExactComponentMatch(db *sql.DB, comp
 
 // tryPostcodeHouseMatch looks for postcode + house number matches
 func (v *runConservativeMatchingContext) tryPostcodeHouseMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
+	// Option A: Query both original addresses AND expanded addresses
 	query := `
-		SELECT da.address_id, da.uprn, da.full_address
-		FROM dim_address da
-		WHERE da.is_historic = false
-			AND da.uprn IS NOT NULL
-			AND da.full_address IS NOT NULL
-			AND UPPER(da.full_address) LIKE '%' || $1 || '%'  -- House number
-			AND UPPER(da.full_address) LIKE '%' || $2 || '%'  -- Postcode
-		ORDER BY LENGTH(da.full_address), da.address_id
+		(SELECT a.address_id, a.uprn, a.full_address, 'original' as source_type
+		 FROM dim_address a
+		 WHERE a.uprn IS NOT NULL
+		   AND a.full_address IS NOT NULL
+		   AND UPPER(a.full_address) LIKE '%' || $1 || '%'
+		   AND UPPER(a.full_address) LIKE '%' || $2 || '%')
+		UNION ALL
+		(SELECT e.original_address_id, e.uprn, e.full_address, 'expanded' as source_type
+		 FROM dim_address_expanded e
+		 WHERE e.uprn IS NOT NULL
+		   AND e.full_address IS NOT NULL
+		   AND UPPER(e.full_address) LIKE '%' || $1 || '%'
+		   AND UPPER(e.full_address) LIKE '%' || $2 || '%')
+		ORDER BY 
+			CASE WHEN source_type = 'expanded' THEN 0 ELSE 1 END,
+			LENGTH(full_address), 
+			address_id
 		LIMIT 20
 	`
 	
@@ -2896,16 +2993,29 @@ func (v *runConservativeMatchingContext) tryPostcodeHouseMatch(db *sql.DB, compo
 
 // tryStreetSimilarityMatch uses trigram similarity for street-based matching
 func (v *runConservativeMatchingContext) tryStreetSimilarityMatch(db *sql.DB, components validation.AddressComponents, validator *validation.AddressValidator, debug bool) (*OptimizedMatch, validation.MatchDecision, error) {
-	// Use PostgreSQL's trigram similarity for efficient fuzzy matching
+	// Option A: Query both original addresses AND expanded addresses
 	query := `
-		SELECT da.address_id, da.uprn, da.full_address,
-			   similarity(UPPER(da.full_address), UPPER($1)) as sim_score
-		FROM dim_address da
-		WHERE da.is_historic = false
-			AND da.uprn IS NOT NULL
-			AND da.full_address IS NOT NULL
-			AND similarity(UPPER(da.full_address), UPPER($1)) > 0.3  -- Pre-filter with low threshold
-		ORDER BY sim_score DESC, LENGTH(da.full_address)
+		SELECT address_id, uprn, full_address, sim_score, source_type FROM (
+		  (SELECT a.address_id, a.uprn, a.full_address,
+			     similarity(UPPER(a.full_address), UPPER($1)) as sim_score,
+			     'original' as source_type
+		   FROM dim_address a
+		   WHERE a.uprn IS NOT NULL
+		     AND a.full_address IS NOT NULL
+		     AND similarity(UPPER(a.full_address), UPPER($1)) > 0.3)
+		  UNION ALL
+		  (SELECT e.original_address_id, e.uprn, e.full_address,
+			     similarity(UPPER(e.full_address), UPPER($1)) as sim_score,
+			     'expanded' as source_type
+		   FROM dim_address_expanded e
+		   WHERE e.uprn IS NOT NULL
+		     AND e.full_address IS NOT NULL
+		     AND similarity(UPPER(e.full_address), UPPER($1)) > 0.3)
+		) combined
+		ORDER BY 
+		  CASE WHEN source_type = 'expanded' THEN 0 ELSE 1 END,
+		  sim_score DESC, 
+		  LENGTH(full_address)
 		LIMIT 50  -- Get top candidates for validation
 	`
 	
@@ -2931,7 +3041,8 @@ func (v *runConservativeMatchingContext) evaluateCandidates(rows *sql.Rows, vali
 	
 	for rows.Next() {
 		var candidate OptimizedMatch
-		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address)
+		var sourceType string // Extra column from UNION query
+		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address, &sourceType)
 		if err != nil {
 			return nil, validation.MatchDecision{}, fmt.Errorf("failed to scan candidate: %v", err)
 		}
@@ -2971,7 +3082,8 @@ func (v *runConservativeMatchingContext) evaluateCandidatesWithSimilarity(rows *
 	for rows.Next() {
 		var candidate OptimizedMatch
 		var simScore float64
-		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address, &simScore)
+		var sourceType string // Extra column from UNION query
+		err := rows.Scan(&candidate.AddressID, &candidate.UPRN, &candidate.Address, &simScore, &sourceType)
 		if err != nil {
 			return nil, validation.MatchDecision{}, fmt.Errorf("failed to scan candidate with similarity: %v", err)
 		}
@@ -3012,4 +3124,174 @@ func (v *runConservativeMatchingContext) ParseAddress(address string) validation
 func (v *runConservativeMatchingContext) ValidateAddressForMatching(address string) validation.AddressValidation {
 	parser := validation.NewAddressParser()
 	return parser.ValidateAddressForMatching(address)
+}
+
+// expandLLPGRanges expands LLPG range addresses (e.g., "10-11") into individual addresses
+func expandLLPGRanges(localDebug bool, db *sql.DB) error {
+	fmt.Println("Expanding LLPG Range Addresses...")
+	fmt.Println("==================================")
+	
+	expander := llpg.NewRangeExpander(db)
+	
+	// Initialize the expanded table
+	fmt.Println("Initializing expanded address table...")
+	if err := expander.InitializeExpandedTable(); err != nil {
+		return fmt.Errorf("failed to initialize expanded table: %v", err)
+	}
+	
+	// Perform the expansion
+	fmt.Println("Processing range expansions...")
+	fmt.Println("  - Numeric ranges (e.g., 10-11 → 10, 11)")
+	fmt.Println("  - Unit ranges (e.g., Unit 3-4 → Unit 3, Unit 4)")
+	fmt.Println("  - Alpha ranges (e.g., 9A-9C → 9A, 9B, 9C)")
+	
+	startTime := time.Now()
+	expandedCount, err := expander.ExpandAllRanges()
+	if err != nil {
+		return fmt.Errorf("failed to expand ranges: %v", err)
+	}
+	
+	duration := time.Since(startTime)
+	
+	// Get statistics
+	stats, err := expander.GetExpandedAddressStats()
+	if err != nil {
+		return fmt.Errorf("failed to get statistics: %v", err)
+	}
+	
+	fmt.Printf("\n=== EXPANSION COMPLETE ===\n")
+	fmt.Printf("Time taken: %v\n", duration)
+	fmt.Printf("Addresses expanded: %d\n", expandedCount)
+	fmt.Printf("\nTable Statistics:\n")
+	for expansionType, count := range stats {
+		fmt.Printf("  - %s: %d\n", expansionType, count)
+	}
+	fmt.Printf("\nTotal addresses available: %d\n", stats["original"]+stats["range_expansion"])
+	
+	// Show some examples
+	fmt.Println("\nExample expansions:")
+	rows, err := db.Query(`
+		SELECT 
+			o.full_address as original,
+			e.full_address as expanded,
+			e.unit_number
+		FROM dim_address o
+		JOIN dim_address_expanded e ON o.address_id = e.original_address_id
+		WHERE e.expansion_type = 'range_expansion'
+		  AND o.full_address LIKE '%-%'
+		ORDER BY o.full_address, e.unit_number
+		LIMIT 5
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var original, expanded, unit string
+			if rows.Scan(&original, &expanded, &unit) == nil {
+				fmt.Printf("  %s\n    → Unit %s: %s\n", original, unit, expanded)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// cleanSourceAddressData fixes spelling errors and formatting issues in source addresses
+func cleanSourceAddressData(localDebug bool, db *sql.DB) error {
+	fmt.Println("Cleaning source address data...")
+	fmt.Println("==================================")
+	
+	// Define address corrections
+	corrections := map[string]string{
+		"PFTERSFTELD":                                          "PETERSFIELD",
+		"PETERSFIEID":                                          "PETERSFIELD", 
+		"HANTS":                                                "HAMPSHIRE",
+		"SOUTH VIEW":                                           "SOUTHVIEW",
+		"HOLLY BANK":                                           "HOLLYBANK",
+		"FOUR YRARKS":                                          "FOUR MARKS",
+		" THORN LANE, FOUR MARKS":                              " THORN LANE FOUR MARKS ALTON GU34 5BX",
+	}
+	
+	totalUpdates := 0
+	
+	for incorrect, correct := range corrections {
+		fmt.Printf("Fixing '%s' → '%s'...\n", incorrect, correct)
+		
+		// Update raw_address
+		updateQuery := `
+		UPDATE src_document 
+		SET raw_address = REPLACE(raw_address, $1, $2)
+		WHERE raw_address LIKE '%' || $1 || '%'
+		`
+		
+		result, err := db.Exec(updateQuery, incorrect, correct)
+		if err != nil {
+			return fmt.Errorf("failed to update '%s': %v", incorrect, err)
+		}
+		
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected > 0 {
+			fmt.Printf("  ✓ Updated %d records\n", rowsAffected)
+			totalUpdates += int(rowsAffected)
+		}
+		
+		// Also update standardized_address if it exists
+		updateStandardizedQuery := `
+		UPDATE src_document 
+		SET standardized_address = REPLACE(standardized_address, $1, $2)
+		WHERE standardized_address LIKE '%' || $1 || '%'
+		`
+		
+		result, err = db.Exec(updateStandardizedQuery, incorrect, correct)
+		if err != nil {
+			// Ignore errors for standardized_address as it might not exist yet
+			continue
+		}
+		
+		rowsAffected, _ = result.RowsAffected()
+		if rowsAffected > 0 {
+			fmt.Printf("  ✓ Updated %d standardized addresses\n", rowsAffected)
+		}
+	}
+	
+	fmt.Printf("\nTotal address corrections applied: %d\n", totalUpdates)
+	
+	// Additional cleaning: trim whitespace and normalize case
+	fmt.Println("\nNormalizing address formats...")
+	normalizeQuery := `
+	UPDATE src_document 
+	SET raw_address = TRIM(UPPER(raw_address))
+	WHERE raw_address != TRIM(UPPER(raw_address))
+	`
+	
+	result, err := db.Exec(normalizeQuery)
+	if err != nil {
+		return fmt.Errorf("failed to normalize addresses: %v", err)
+	}
+	
+	rowsAffected, _ := result.RowsAffected()
+	fmt.Printf("  ✓ Normalized %d addresses\n", rowsAffected)
+	
+	// Create enhanced canonical addresses that handle property names
+	fmt.Println("\nCreating enhanced canonical addresses...")
+	enhancedCanonicalQuery := `
+	UPDATE src_document 
+	SET standardized_address = CASE
+		-- Extract number + street when there's a property name prefix
+		WHEN raw_address ~ '^[A-Z0-9\s]*, \d+[A-Z]? [A-Z\s]+' 
+		THEN TRIM(SUBSTRING(raw_address FROM ', (.+)'))
+		ELSE raw_address
+	END
+	WHERE raw_address ~ '^[A-Z0-9\s]*, \d+[A-Z]? [A-Z\s]+'
+	`
+	
+	result, err = db.Exec(enhancedCanonicalQuery)
+	if err != nil {
+		return fmt.Errorf("failed to create enhanced canonical addresses: %v", err)
+	}
+	
+	rowsAffected, _ = result.RowsAffected()
+	fmt.Printf("  ✓ Created %d enhanced canonical addresses\n", rowsAffected)
+	
+	fmt.Println("\n✓ Address data cleaning completed")
+	return nil
 }

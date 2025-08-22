@@ -25,12 +25,14 @@
             "id": "d8234de6f89c14b2",
             "type": "leaf",
             "state": {
-              "type": "release-notes",
+              "type": "markdown",
               "state": {
-                "currentVersion": "1.9.10"
+                "file": "PROJECT_OVERVIEW.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-book-up",
-              "title": "Release Notes 1.9.10"
+              "icon": "lucide-file",
+              "title": "PROJECT_OVERVIEW"
             }
           }
         ],
@@ -184,19 +186,20 @@
   },
   "active": "d8234de6f89c14b2",
   "lastOpenFiles": [
+    "cmd/matcher-v2/parallel_layer2.go",
+    "cmd/matcher-v2/optimize_layer2.go",
+    "cmd/matcher-v2/layer2_only.go",
+    "cmd/matcher-v2/rebuild_fact_simple.go",
+    "cmd/matcher-v2/rebuild_fact_intelligent.go.tmp.1631.1755817295206",
+    "cmd/matcher-v2/rebuild_fact_intelligent.go.tmp.1631.1755817256688",
+    "cmd/matcher-v2/rebuild_fact_intelligent.go.tmp.1631.1755817241301",
+    "cmd/matcher-v2/rebuild_fact_intelligent.go.tmp.1631.1755817212452",
+    "cmd/matcher-v2/rebuild_fact_intelligent.go",
+    "cmd/matcher-v2/main.go.tmp.1631.1755816931207",
+    "cmd/matcher-v2/main.go.tmp.1631.1755793917479",
     "MATCHING_PIPELINE_OPTIMIZATION.md",
-    "cmd/matcher-v2/main.go.tmp.1631.1755769157034",
-    "cmd/matcher-v2/main.go.tmp.1631.1755768975740",
-    "cmd/matcher-v2/main.go.tmp.1631.1755768359093",
-    "bin/matcher-v2",
-    "internal/validation/validator_test.go",
-    "internal/validation/validator.go",
-    "internal/validation/parser.go",
-    "internal/validation/types.go",
-    "internal/validation",
     "ADDRESS_MATCHING_FIX_PLAN.md",
     "IMPROVEMENTS_IMPLEMENTED.md",
-    "bin/matcher-v3-test",
     "DEPLOYMENT_SUCCESS_REPORT.md",
     "DIMENSIONAL_MODEL_DEPLOYMENT_SUMMARY.md",
     "FACT_TABLE_DESIGN.md",
@@ -218,7 +221,6 @@
     "WEB_INTERFACE_DESIGN.md",
     "README.md",
     "resume_prompt.md",
-    "CLAUDE.md",
-    "gemini.md"
+    "CLAUDE.md"
   ]
 }

@@ -60,7 +60,7 @@ func DefaultConfig() *Config {
 			Host: "0.0.0.0",
 		},
 		Database: DatabaseConfig{
-			URL:            "postgres://postgres:password@localhost:15432/ehdc_gis?sslmode=disable",
+			URL:            "", // Must be set via environment variables
 			MaxConnections: 25,
 		},
 		Auth: AuthConfig{

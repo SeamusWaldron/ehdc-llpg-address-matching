@@ -11,12 +11,12 @@ The project processes four historic document datasets (decision notices, land ch
 ## Database Connection
 
 The system uses PostgreSQL with PostGIS running in Docker:
-- **Connection**: `postgres://user:password@localhost:15432/ehdc_gis?sslmode=disable`
+- **Connection**: `postgres://postgres:kljh234hjkl2h@localhost:15435/ehdc_llpg?sslmode=disable`
 - **Host**: localhost
-- **Port**: 15432 (external), 5432 (container internal)
-- **Database**: ehdc_gis
-- **User**: user
-- **Password**: password
+- **Port**: 15435 (external), 5432 (container internal)
+- **Database**: ehdc_llpg
+- **User**: postgres
+- **Password**: kljh234hjkl2h
 
 ## Development Commands
 
@@ -26,7 +26,7 @@ The system uses PostgreSQL with PostGIS running in Docker:
 docker compose up -d
 
 # Connect to database
-psql -h localhost -p 15432 -U user -d ehdc_gis
+PGPASSWORD=kljh234hjkl2h psql -h localhost -p 15435 -U postgres -d ehdc_llpg
 
 # Check database connection in Go app
 go run ./app/main.go

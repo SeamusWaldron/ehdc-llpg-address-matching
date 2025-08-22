@@ -13,25 +13,30 @@ func LoadConfig(configFile string) error {
 
 // LoadEnv loads environment variables from .env file
 func LoadEnv() error {
-	// Try to load from .env file
-	if data, err := os.ReadFile(".env"); err == nil {
-		lines := strings.Split(string(data), "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
+	// Try to load from .env file in current directory first, then parent directories
+	envPaths := []string{".env", "../.env", "../../.env"}
+	
+	for _, envPath := range envPaths {
+		if data, err := os.ReadFile(envPath); err == nil {
+			lines := strings.Split(string(data), "\n")
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
 				
-				// Only set if not already set
-				if os.Getenv(key) == "" {
-					os.Setenv(key, value)
+				parts := strings.SplitN(line, "=", 2)
+				if len(parts) == 2 {
+					key := strings.TrimSpace(parts[0])
+					value := strings.TrimSpace(parts[1])
+					
+					// Only set if not already set
+					if os.Getenv(key) == "" {
+						os.Setenv(key, value)
+					}
 				}
 			}
+			break // Successfully loaded, don't try other paths
 		}
 	}
 	return nil

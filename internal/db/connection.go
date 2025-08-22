@@ -15,11 +15,15 @@ type Connection struct {
 
 // NewConnection creates a new database connection
 func NewConnection() (*Connection, error) {
-	host := getEnvOrDefault("PGHOST", "localhost")
-	port := getEnvOrDefault("PGPORT", "15432")
-	user := getEnvOrDefault("PGUSER", "user")
-	password := getEnvOrDefault("PGPASSWORD", "password")
-	dbname := getEnvOrDefault("PGDATABASE", "ehdc_gis")
+	host := getEnvOrDefault("PGHOST", "")
+	port := getEnvOrDefault("PGPORT", "")
+	user := getEnvOrDefault("PGUSER", "")
+	password := getEnvOrDefault("PGPASSWORD", "")
+	dbname := getEnvOrDefault("PGDATABASE", "")
+
+	if host == "" || port == "" || user == "" || password == "" || dbname == "" {
+		return nil, fmt.Errorf("missing required database environment variables: PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE")
+	}
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		host, port, user, password, dbname)
