@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning Records Mapping Tool</title>
+    <style>
+        /* Design System Tokens */
+        :root {
+            /* Status Colours */
+            --status-no-location: #6B7280;
+            --status-low: #D97706;
+            --status-review: #2563EB;
+            --status-high: #059669;
+            
+            /* UI Colours */
+            --primary: #2563EB;
+            --primary-hover: #1D4ED8;
+            --secondary: #6B7280;
+            --secondary-hover: #4B5563;
+            --tertiary: #F3F4F6;
+            --tertiary-hover: #E5E7EB;
+            --danger: #DC2626;
+            --danger-hover: #B91C1C;
+            
+            /* Greys */
+            --grey-50: #F9FAFB;
+            --grey-100: #F3F4F6;
+            --grey-200: #E5E7EB;
+            --grey-300: #D1D5DB;
+            --grey-400: #9CA3AF;
+            --grey-500: #6B7280;
+            --grey-600: #4B5563;
+            --grey-700: #374151;
+            --grey-800: #1F2937;
+            --grey-900: #111827;
+            
+            /* Typography */
+            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif;
+            --font-size-xs: 0.75rem;
+            --font-size-sm: 0.875rem;
+            --font-size-base: 1rem;
+            --font-size-lg: 1.125rem;
+            --font-size-xl: 1.25rem;
+            --font-size-2xl: 1.5rem;
+            
+            /* Spacing */
+            --space-1: 0.25rem;
+            --space-2: 0.5rem;
+            --space-3: 0.75rem;
+            --space-4: 1rem;
+            --space-5: 1.25rem;
+            --space-6: 1.5rem;
+            --space-8: 2rem;
+            --space-12: 3rem;
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            
+            /* Border radius */
+            --radius-sm: 0.25rem;
+            --radius-md: 0.375rem;
+            --radius-lg: 0.5rem;
+            --radius-xl: 0.75rem;
+        }
+
+        /* Reset & Base Styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            font-size: var(--font-size-base);
+            line-height: 1.5;
+            color: var(--grey-900);
+            background: var(--grey-50);
+        }
+
+        /* Component Library */
+        
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: var(--space-2);
+            padding: var(--space-2) var(--space-4);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+            border: 1px solid transparent;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            min-height: 36px;
+        }
+
+        .btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn-secondary {
+            background: var(--grey-100);
+            color: var(--grey-700);
+            border-color: var(--grey-300);
+        }
+
+        .btn-secondary:hover {
+            background: var(--grey-200);
+        }
+
+        .btn-tertiary {
+            background: transparent;
+            color: var(--grey-600);
+        }
+
+        .btn-tertiary:hover {
+            background: var(--grey-100);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-hover);
+        }
+
+        .btn-sm {
+            padding: var(--space-1) var(--space-3);
+            font-size: var(--font-size-xs);
+            min-height: 28px;
+        }
+
+        /* Form Controls */
+        .form-control {
+            width: 100%;
+            padding: var(--space-2) var(--space-3);
+            border: 1px solid var(--grey-300);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            transition: border-color 0.2s ease;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+        }
+
+        /* Toggle Switch */
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--grey-300);
+            transition: 0.2s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.2s;
+            border-radius: 50%;
+        }
+
+        .toggle input:checked + .toggle-slider {
+            background-color: var(--primary);
+        }
+
+        .toggle input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Badges & Pills */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: var(--space-1) var(--space-2);
+            font-size: var(--font-size-xs);
+            font-weight: 500;
+            border-radius: var(--radius-sm);
+        }
+
+        .badge-no-location {
+            background: var(--status-no-location);
+            color: white;
+        }
+
+        .badge-low {
+            background: var(--status-low);
+            color: white;
+        }
+
+        .badge-review {
+            background: var(--status-review);
+            color: white;
+        }
+
+        .badge-high {
+            background: var(--status-high);
+            color: white;
+        }
+
+        .badge-secondary {
+            background: var(--grey-100);
+            color: var(--grey-700);
+        }
+
+        /* Cards */
+        .card {
+            background: white;
+            border: 1px solid var(--grey-200);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-header {
+            padding: var(--space-4);
+            border-bottom: 1px solid var(--grey-200);
+        }
+
+        .card-body {
+            padding: var(--space-4);
+        }
+
+        /* Layout Components */
+        .app-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr 400px;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+        }
+
+        .header {
+            grid-column: 1 / -1;
+            background: white;
+            border-bottom: 1px solid var(--grey-200);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 var(--space-6);
+        }
+
+        .app-title {
+            font-size: var(--font-size-lg);
+            font-weight: 600;
+            color: var(--grey-900);
+        }
+
+        .env-badge {
+            background: var(--grey-100);
+            color: var(--grey-600);
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-sm);
+            font-weight: 500;
+        }
+
+        .filters-panel {
+            background: white;
+            border-right: 1px solid var(--grey-200);
+            padding: var(--space-6);
+            overflow-y: auto;
+        }
+
+        .map-container {
+            position: relative;
+            background: var(--grey-100);
+            overflow: hidden;
+        }
+
+        .map-canvas {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), 
+                        linear-gradient(-45deg, #f0f0f0 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #f0f0f0 75%), 
+                        linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--grey-500);
+            font-size: var(--font-size-lg);
+        }
+
+        .details-drawer {
+            background: white;
+            border-left: 1px solid var(--grey-200);
+            padding: var(--space-6);
+            overflow-y: auto;
+        }
+
+        /* Map Controls */
+        .map-controls {
+            position: absolute;
+            top: var(--space-4);
+            right: var(--space-4);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+        }
+
+        .legend {
+            position: absolute;
+            bottom: var(--space-4);
+            left: var(--space-4);
+            background: white;
+            padding: var(--space-4);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            min-width: 200px;
+        }
+
+        .legend-title {
+            font-weight: 600;
+            margin-bottom: var(--space-3);
+            font-size: var(--font-size-sm);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            margin-bottom: var(--space-2);
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .legend-label {
+            font-size: var(--font-size-sm);
+            color: var(--grey-700);
+        }
+
+        /* Filter Components */
+        .filter-section {
+            margin-bottom: var(--space-6);
+        }
+
+        .filter-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: var(--space-2);
+            font-size: var(--font-size-sm);
+            color: var(--grey-700);
+        }
+
+        .filter-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: var(--space-3);
+        }
+
+        .filter-toggle label {
+            font-size: var(--font-size-sm);
+            color: var(--grey-700);
+        }
+
+        /* Confidence Slider */
+        .confidence-slider {
+            margin: var(--space-4) 0;
+        }
+
+        .slider-container {
+            position: relative;
+            margin: var(--space-2) 0;
+        }
+
+        .slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--grey-200);
+            outline: none;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: none;
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: var(--font-size-xs);
+            color: var(--grey-500);
+            margin-top: var(--space-1);
+        }
+
+        /* Multi-select */
+        .multi-select {
+            border: 1px solid var(--grey-300);
+            border-radius: var(--radius-md);
+            padding: var(--space-2);
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .multi-select-item {
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            padding: var(--space-1);
+            margin-bottom: var(--space-1);
+        }
+
+        .multi-select-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .multi-select-item label {
+            font-size: var(--font-size-sm);
+            cursor: pointer;
+        }
+
+        /* Record Details */
+        .record-header {
+            display: flex;
+            align-items: center;
+            gap: var(--space-3);
+            margin-bottom: var(--space-4);
+        }
+
+        .record-id {
+            font-weight: 600;
+            font-size: var(--font-size-lg);
+        }
+
+        .confidence-pill {
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius-md);
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+        }
+
+        .detail-section {
+            margin-bottom: var(--space-6);
+        }
+
+        .detail-section h3 {
+            font-size: var(--font-size-base);
+            font-weight: 600;
+            margin-bottom: var(--space-3);
+            color: var(--grey-900);
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: var(--space-2);
+        }
+
+        .detail-label {
+            font-size: var(--font-size-sm);
+            color: var(--grey-600);
+        }
+
+        .detail-value {
+            font-size: var(--font-size-sm);
+            color: var(--grey-900);
+            font-weight: 500;
+        }
+
+        /* Candidate Cards */
+        .candidates-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-3);
+        }
+
+        .candidate-card {
+            padding: var(--space-3);
+            border: 1px solid var(--grey-200);
+            border-radius: var(--radius-md);
+            transition: border-color 0.2s ease;
+        }
+
+        .candidate-card:hover {
+            border-color: var(--primary);
+        }
+
+        .candidate-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: var(--space-2);
+        }
+
+        .candidate-uprn {
+            font-weight: 600;
+            font-size: var(--font-size-sm);
+            color: var(--grey-900);
+        }
+
+        .candidate-score {
+            font-size: var(--font-size-xs);
+            color: var(--grey-600);
+        }
+
+        .candidate-address {
+            font-size: var(--font-size-sm);
+            color: var(--grey-700);
+            margin-bottom: var(--space-2);
+        }
+
+        .candidate-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        /* LLPG Search */
+        .search-container {
+            position: relative;
+        }
+
+        .search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid var(--grey-300);
+            border-top: none;
+            border-radius: 0 0 var(--radius-md) var(--radius-md);
+            box-shadow: var(--shadow-lg);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10;
+        }
+
+        .search-result-item {
+            padding: var(--space-3);
+            border-bottom: 1px solid var(--grey-100);
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        .search-result-item:hover {
+            background: var(--grey-50);
+        }
+
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .app-layout {
+                grid-template-columns: 1fr;
+                grid-template-rows: 60px 1fr;
+            }
+            
+            .filters-panel {
+                position: absolute;
+                left: -320px;
+                top: 60px;
+                bottom: 0;
+                width: 320px;
+                z-index: 20;
+                transition: left 0.3s ease;
+            }
+            
+            .filters-panel.open {
+                left: 0;
+            }
+            
+            .details-drawer {
+                position: absolute;
+                right: -400px;
+                top: 60px;
+                bottom: 0;
+                width: 400px;
+                z-index: 20;
+                transition: right 0.3s ease;
+            }
+            
+            .details-drawer.open {
+                right: 0;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .filters-panel,
+            .details-drawer {
+                width: 100%;
+                right: -100%;
+                left: -100%;
+            }
+            
+            .filters-panel.open {
+                left: 0;
+            }
+            
+            .details-drawer.open {
+                right: 0;
+            }
+        }
+
+        /* Interactive States */
+        .marker {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid white;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .marker:hover {
+            transform: scale(1.2);
+        }
+
+        .marker-no-location {
+            background: var(--status-no-location);
+        }
+
+        .marker-low {
+            background: var(--status-low);
+        }
+
+        .marker-review {
+            background: var(--status-review);
+        }
+
+        .marker-high {
+            background: var(--status-high);
+        }
+
+        /* Toast Notifications */
+        .toast {
+            position: fixed;
+            top: var(--space-4);
+            right: var(--space-4);
+            background: white;
+            border: 1px solid var(--grey-200);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            box-shadow: var(--shadow-lg);
+            z-index: 50;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Selection Summary */
+        .selection-summary {
+            position: absolute;
+            bottom: var(--space-4);
+            right: var(--space-4);
+            background: white;
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: var(--space-4);
+            min-width: 300px;
+        }
+
+        .summary-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--space-2);
+            margin-bottom: var(--space-4);
+        }
+
+        .summary-chip {
+            display: flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: var(--space-1) var(--space-2);
+            background: var(--grey-100);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-size-xs);
+        }
+
+        .chip-count {
+            background: var(--grey-300);
+            color: var(--grey-700);
+            padding: 0 var(--space-1);
+            border-radius: var(--radius-sm);
+            font-weight: 600;
+        }
+
+        /* Utility Classes */
+        .hidden {
+            display: none;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mb-0 { margin-bottom: 0; }
+        .mb-2 { margin-bottom: var(--space-2); }
+        .mb-3 { margin-bottom: var(--space-3); }
+        .mb-4 { margin-bottom: var(--space-4); }
+    </style>
+</head>
+<body>
+    <!-- Main Application Layout -->
+    <div class="app-layout">
+        <!-- Header -->
+        <header class="header">
+            <div style="display: flex; align-items: center; gap: var(--space-4);">
+                <h1 class="app-title">Planning Records Mapping Tool</h1>
+                <span class="env-badge">Internal</span>
+            </div>
+            <button class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7,10 12,15 17,10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Export
+            </button>
+        </header>
+
+        <!-- Filters Panel -->
+        <aside class="filters-panel">
+            <h2 style="font-size: var(--font-size-lg); font-weight: 600; margin-bottom: var(--space-6); color: var(--grey-900);">Filters</h2>
+            
+            <!-- Confidence Slider -->
+            <div class="filter-section">
+                <label class="filter-label">Confidence Range</label>
+                <div class="confidence-slider">
+                    <div class="slider-container">
+                        <input type="range" min="0" max="100" value="80" class="slider" id="confidence-min">
+                        <input type="range" min="0" max="100" value="100" class="slider" id="confidence-max" style="margin-top: var(--space-2);">
+                    </div>
+                    <div class="slider-labels">
+                        <span>0.00</span>
+                        <span>1.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Toggles -->
+            <div class="filter-section">
+                <div class="filter-toggle">
+                    <label for="no-location">No suggested location only</label>
+                    <div class="toggle">
+                        <input type="checkbox" id="no-location">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+                <div class="filter-toggle">
+                    <label for="low-confidence">Low confidence only</label>
+                    <div class="toggle">
+                        <input type="checkbox" id="low-confidence">
+                        <span class="toggle-slider"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Source Type Multi-select -->
+            <div class="filter-section">
+                <label class="filter-label">Source Type</label>
+                <div class="multi-select">
+                    <div class="multi-select-item">
+                        <input type="checkbox" id="decision" checked>
+                        <label for="decision">Decision</label>
+                    </div>
+                    <div class="multi-select-item">
+                        <input type="checkbox" id="land-charge" checked>
+                        <label for="land-charge">Land Charge</label>
+                    </div>
+                    <div class="multi-select-item">
+                        <input type="checkbox" id="enforcement" checked>
+                        <label for="enforcement">Enforcement</label>
+                    </div>
+                    <div class="multi-select-item">
+                        <input type="checkbox" id="agreement" checked>
+                        <label for="agreement">Agreement</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Address Search -->
+            <div class="filter-section">
+                <label class="filter-label" for="address-search">Address contains</label>
+                <input type="text" id="address-search" class="form-control" placeholder="Search addresses...">
+            </div>
+
+            <!-- Reset Button -->
+            <button class="btn btn-secondary" style="width: 100%;">Reset filters</button>
+        </aside>
+
+        <!-- Map Container -->
+        <main class="map-container">
+            <div class="map-canvas">
+                MapLibre GL JS Map Canvas
+                <br>
+                <small style="color: var(--grey-400);">Interactive map with clustered markers</small>
+            </div>
+
+            <!-- Map Controls -->
+            <div class="map-controls">
+                <button class="btn btn-secondary" title="Select Rectangle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                    </svg>
+                </button>
+                <button class="btn btn-secondary" title="Select Circle">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                    </svg>
+                </button>
+                <button class="btn btn-tertiary" title="Clear Selection">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Legend -->
+            <div class="legend">
+                <div class="legend-title">Status Legend</div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: var(--status-no-location);"></div>
+                    <span class="legend-label">No location</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: var(--status-low);"></div>
+                    <span class="legend-label">Low confidence (&lt; 0.80)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: var(--status-review);"></div>
+                    <span class="legend-label">Review band (0.80-0.92)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: var(--status-high);"></div>
+                    <span class="legend-label">High confidence (≥ 0.92)</span>
+                </div>
+                <div style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--grey-200);">
+                    <div class="filter-toggle" style="margin-bottom: 0;">
+                        <label style="font-size: var(--font-size-xs);">LLPG layer</label>
+                        <div class="toggle">
+                            <input type="checkbox" id="llpg-toggle">
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Selection Summary (shown when area selected) -->
+            <div class="selection-summary hidden" id="selection-summary">
+                <h3 style="font-size: var(--font-size-base); font-weight: 600; margin-bottom: var(--space-3);">Selection Summary</h3>
+                <div class="summary-chips">
+                    <div class="summary-chip">
+                        Total <span class="chip-count">247</span>
+                    </div>
+                    <div class="summary-chip">
+                        No location <span class="chip-count">23</span>
+                    </div>
+                    <div class="summary-chip">
+                        Low confidence <span class="chip-count">45</span>
+                    </div>
+                    <div class="summary-chip">
+                        Review band <span class="chip-count">89</span>
+                    </div>
+                    <div class="summary-chip">
+                        High confidence <span class="chip-count">90</span>
+                    </div>
+                </div>
+                <div style="display: flex; gap: var(--space-2);">
+                    <button class="btn btn-primary btn-sm">Export selection (VCC)</button>
+                    <button class="btn btn-secondary btn-sm">Export viewport</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Record Details Drawer -->
+        <aside class="details-drawer">
+            <div class="record-header">
+                <span class="record-id">PLN-2024-0123</span>
+                <span class="badge badge-secondary">Decision</span>
+                <span class="confidence-pill badge-review">0.87</span>
+            </div>
+
+            <!-- Address & State -->
+            <div class="detail-section">
+                <h3>Address & Status</h3>
+                <div class="detail-row">
+                    <span class="detail-label">Raw address:</span>
+                    <span class="detail-value">45 High Street, Anytown</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Canonical address:</span>
+                    <span class="detail-value">45 HIGH STREET, ANYTOWN, AT1 2BC</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Current UPRN:</span>
+                    <span class="detail-value">100023456789</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Matched by:</span>
+                    <span class="detail-value">trgm</span>
+                </div>
+            </div>
+
+            <!-- Coordinates -->
+            <div class="detail-section">
+                <h3>Coordinates</h3>
+                <div class="detail-row">
+                    <span class="detail-label">WGS84 (Lon/Lat):</span>
+                    <span class="detail-value">-1.2345, 52.6789</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">BNG (E/N):</span>
+                    <span class="detail-value">387542, 289674</span>
+                </div>
+            </div>
+
+            <!-- Top Candidates -->
+            <div class="detail-section">
+                <h3>Top Candidates</h3>
+                <div class="candidates-list">
+                    <div class="candidate-card">
+                        <div class="candidate-header">
+                            <span class="candidate-uprn">100023456789</span>
+                            <span class="candidate-score">Score: 0.87</span>
+                        </div>
+                        <div class="candidate-address">45 HIGH STREET, ANYTOWN, AT1 2BC</div>
+                        <div class="candidate-actions">
+                            <button class="btn btn-primary btn-sm">Accept</button>
+                        </div>
+                    </div>
+                    <div class="candidate-card">
+                        <div class="candidate-header">
+                            <span class="candidate-uprn">100023456790</span>
+                            <span class="candidate-score">Score: 0.72</span>
+                        </div>
+                        <div class="candidate-address">47 HIGH STREET, ANYTOWN, AT1 2BC</div>
+                        <div class="candidate-actions">
+                            <button class="btn btn-secondary btn-sm">Accept</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LLPG Search -->
+            <div class="detail-section">
+                <h3>LLPG Search</h3>
+                <div class="search-container">
+                    <input type="text" class="form-control" placeholder="Type to search LLPG addresses..." id="llpg-search">
+                    <div class="search-results hidden" id="search-results">
+                        <div class="search-result-item">
+                            <div style="font-weight: 600; font-size: var(--font-size-sm);">100023456791</div>
+                            <div style="font-size: var(--font-size-sm); color: var(--grey-700);">43 HIGH STREET, ANYTOWN, AT1 2BC</div>
+                        </div>
+                        <div class="search-result-item">
+                            <div style="font-weight: 600; font-size: var(--font-size-sm);">100023456792</div>
+                            <div style="font-size: var(--font-size-sm); color: var(--grey-700);">49 HIGH STREET, ANYTOWN, AT1 2BC</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pick on Map -->
+            <div class="detail-section">
+                <h3>Pick on Map</h3>
+                <p style="font-size: var(--font-size-sm); color: var(--grey-600); margin-bottom: var(--space-3);">
+                    Click an LLPG point on the map or drop a manual pin to set the location.
+                </p>
+                <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-3);">
+                    <button class="btn btn-secondary">Pick LLPG point</button>
+                    <button class="btn btn-secondary">Drop manual pin</button>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="detail-section">
+                <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-4);">
+                    <button class="btn btn-primary">Save manual point</button>
+                    <button class="btn btn-tertiary">Revert</button>
+                </div>
+                
+                <!-- Audit Trail -->
+                <div style="padding: var(--space-3); background: var(--grey-50); border-radius: var(--radius-md);">
+                    <div style="font-size: var(--font-size-xs); color: var(--grey-600);">
+                        Last updated by <strong>A. Reviewer</strong> on 15 Aug 2025, 14:32
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Sample Toast Notification -->
+    <div class="toast hidden" id="toast">
+        <div style="display: flex; align-items: center; gap: var(--space-2);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--status-high);">
+                <polyline points="20,6 9,17 4,12"/>
+            </svg>
+            <span>VCC CSV generated for selection</span>
+        </div>
+    </div>
+
+    <script>
+        // Sample interactions for demonstration
+        document.addEventListener('DOMContentLoaded', function() {
+            // Toggle filters panel on mobile
+            const toggles = document.querySelectorAll('.toggle input');
+            toggles.forEach(toggle => {
+                toggle.addEventListener('change', function() {
+                    console.log(`${this.id} toggled: ${this.checked}`);
+                });
+            });
+
+            // LLPG search simulation
+            const llpgSearch = document.getElementById('llpg-search');
+            const searchResults = document.getElementById('search-results');
+            
+            llpgSearch.addEventListener('input', function() {
+                if (this.value.length > 2) {
+                    searchResults.classList.remove('hidden');
+                } else {
+                    searchResults.classList.add('hidden');
+                }
+            });
+
+            // Confidence sliders
+            const confidenceMin = document.getElementById('confidence-min');
+            const confidenceMax = document.getElementById('confidence-max');
+            
+            function updateSliderLabels() {
+                const labels = document.querySelector('.slider-labels');
+                if (labels) {
+                    labels.innerHTML = `
+                        <span>${(confidenceMin.value / 100).toFixed(2)}</span>
+                        <span>${(confidenceMax.value / 100).toFixed(2)}</span>
+                    `;
+                }
+            }
+            
+            confidenceMin.addEventListener('input', updateSliderLabels);
+            confidenceMax.addEventListener('input', updateSliderLabels);
+
+            // Show selection summary
+            document.querySelector('[title="Select Rectangle"]').addEventListener('click', function() {
+                document.getElementById('selection-summary').classList.remove('hidden');
+            });
+
+            // Show toast notification
+            document.querySelector('.btn-primary[style*="width"]').addEventListener('click', function() {
+                const toast = document.getElementById('toast');
+                toast.classList.remove('hidden');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 3000);
+            });
+
+            // Candidate accept buttons
+            document.querySelectorAll('.candidate-card .btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    console.log('Candidate accepted');
+                    // Show success feedback
+                });
+            });
+
+            // Map interaction simulation
+            console.log('Planning Records Mapping Tool loaded');
+            console.log('MapLibre GL JS integration point ready');
+        });
+    </script>
+</body>
+</html>

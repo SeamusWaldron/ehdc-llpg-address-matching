@@ -49,7 +49,7 @@ func getOptimalWorkerCount() int {
 
 func main() {
 	var (
-		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, layer3-parallel-groups, layer3-parallel-docs, layer3-parallel-combined, layer3-enhanced, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
+		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, layer3-parallel-groups, layer3-parallel-docs, layer3-parallel-combined, layer3-enhanced, setup-spatial-tables, build-spatial-parallel, build-road-postcode-parallel, build-road-parallel, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
 		llpgFile    = flag.String("llpg", "", "Path to LLPG CSV file")
 		osUprnFile  = flag.String("os-uprn", "", "Path to OS Open UPRN CSV file")
 		sourceFiles = flag.String("sources", "", "Comma-separated paths to source CSV files (type:path,type:path)")
@@ -143,6 +143,14 @@ func main() {
 	//	err = runParallelLayer3Combined(*debug, db)
 	case "layer3-enhanced":
 		err = parallelFuzzyMatchIndividualDocuments(*debug, db)
+	case "setup-spatial-tables":
+		err = setupSpatialTables(*debug, db)
+	case "build-spatial-parallel":
+		err = refreshSpatialTables(*debug, db)
+	case "build-road-postcode-parallel":
+		err = buildRoadPostcodeAreasParallel(*debug, db)
+	case "build-road-parallel":
+		err = buildRoadAreasParallel(*debug, db)
 	case "validate-integrity":
 		err = validateDataIntegrity(*debug, db)
 	case "stats":
@@ -206,6 +214,18 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("  Run enhanced Layer 3 with address deduplication and auto-scaling:")
 	fmt.Println("    ./matcher-v2 -cmd=layer3-enhanced")
+	fmt.Println()
+	fmt.Println("  Setup spatial tables for Layer 4 preprocessing:")
+	fmt.Println("    ./matcher-v2 -cmd=setup-spatial-tables")
+	fmt.Println()
+	fmt.Println("  Build all spatial areas with parallel processing:")
+	fmt.Println("    ./matcher-v2 -cmd=build-spatial-parallel")
+	fmt.Println()
+	fmt.Println("  Build road+postcode spatial areas only:")
+	fmt.Println("    ./matcher-v2 -cmd=build-road-postcode-parallel")
+	fmt.Println()
+	fmt.Println("  Build road-only spatial areas:")
+	fmt.Println("    ./matcher-v2 -cmd=build-road-parallel")
 	fmt.Println()
 	fmt.Println("  Standardize and clean source addresses:")
 	fmt.Println("    ./matcher-v2 -cmd=standardize-addresses")

@@ -46,6 +46,26 @@ config.json
 /build/
 /dist/
 
+# Test and development artifacts (moved to archive)
+test_*
+*_test.go
+*.test
+check_*.sql
+validate_*.sql
+generate_*.sql
+component-matcher*
+address-matcher*
+matcher-v2*
+gopostal-*
+loader
+*_stats.txt
+final_*.txt
+
+# Archive should be tracked but contents may vary
+archive/old-binaries/*
+archive/old-scripts/*.log
+archive/old-scripts/*_stats.txt
+
 # Large data files
 llpg_docs/osopenuprn_202507.csv
 archive/osopenuprn_202507_csv.zip

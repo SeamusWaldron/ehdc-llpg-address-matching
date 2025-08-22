@@ -1,21 +1,19 @@
 # EHDC LLPG Address Matching System - Complete Stack
 # Implements ADDRESS_MATCHING_ALGORITHM.md with local-first approach
 
-version: '3.8'
-
 services:
   # PostgreSQL with PostGIS for address data and fuzzy matching
   postgres:
-    image: postgres:15
+    image: postgis/postgis:15-3.4
     container_name: ehdc_postgres
     environment:
-      POSTGRES_DB: ehdc_llpg
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: kljh234hjkl2h
+      POSTGRES_DB: ${DB_NAME:-ehdc_llpg}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-kljh234hjkl2h}
     ports:
-      - "15435:5432"
+      - "${DB_PORT:-15435}:5432"
     volumes:
-      - /Users/seamus_waldron/Documents/Dev/databases/ehdc-llpg:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_PATH:-postgres_data}:/var/lib/postgresql/data
       - ./migrations:/docker-entrypoint-initdb.d
     command: |
       postgres 
@@ -24,34 +22,37 @@ services:
       -c shared_buffers=256MB
       -c effective_cache_size=1GB
       -c work_mem=4MB
+    restart: unless-stopped
 
   # Qdrant vector database for semantic address matching
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: ehdc_qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
     environment:
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__SERVICE__GRPC_PORT: 6334
+    restart: unless-stopped
 
-  # Ollama for local embeddings (nomic-embed-text model)
+  # Ollama for local embeddings and LLM address matching
   ollama:
     image: ollama/ollama:latest
     container_name: ehdc_ollama
     ports:
-      - "11434:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
       OLLAMA_KEEP_ALIVE: "24h"
       OLLAMA_HOST: "0.0.0.0"
-    # Pull the embedding model on startup
+    # Pull required models on startup
     command: |
-      sh -c "ollama serve & sleep 10 && ollama pull nomic-embed-text && wait"
+      sh -c "ollama serve & sleep 10 && ollama pull nomic-embed-text && ollama pull llama3.2:1b && wait"
+    restart: unless-stopped
 
   # libpostal HTTP service for address parsing
   libpostal:
@@ -60,9 +61,10 @@ services:
       dockerfile: Dockerfile.libpostal
     container_name: ehdc_libpostal
     ports:
-      - "8080:8080"
+      - "${LIBPOSTAL_PORT:-8080}:8080"
     environment:
       PORT: 8080
+    restart: unless-stopped
 
 volumes:
   postgres_data:
