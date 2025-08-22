@@ -33,7 +33,7 @@ const version = "2.0.0-proper-algorithm"
 
 func main() {
 	var (
-		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
+		command     = flag.String("cmd", "", "Command to run: setup-db, load-llpg, load-os-uprn, load-sources, validate-uprns, expand-llpg-ranges, setup-vector, match-batch, match-single, conservative-match, apply-corrections, fuzzy-match-groups, fuzzy-match-individual, layer3-parallel-groups, layer3-parallel-docs, layer3-parallel-combined, standardize-addresses, comprehensive-match, llm-fix-addresses, rebuild-fact, validate-integrity, stats")
 		llpgFile    = flag.String("llpg", "", "Path to LLPG CSV file")
 		osUprnFile  = flag.String("os-uprn", "", "Path to OS Open UPRN CSV file")
 		sourceFiles = flag.String("sources", "", "Comma-separated paths to source CSV files (type:path,type:path)")
@@ -117,6 +117,12 @@ func main() {
 		err = runOptimizedLayer2(*debug, db)
 	case "layer2-parallel":
 		err = runParallelLayer2(*debug, db)
+	case "layer3-parallel-groups":
+		err = runParallelLayer3Groups(*debug, db)
+	case "layer3-parallel-docs":
+		err = runParallelLayer3Documents(*debug, db)
+	case "layer3-parallel-combined":
+		err = runParallelLayer3Combined(*debug, db)
 	case "validate-integrity":
 		err = validateDataIntegrity(*debug, db)
 	case "stats":
@@ -168,6 +174,15 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("  Find fuzzy matches for individual documents:")
 	fmt.Println("    ./matcher-v2 -cmd=fuzzy-match-individual")
+	fmt.Println()
+	fmt.Println("  Run parallel Layer 3a (group-based fuzzy matching):")
+	fmt.Println("    ./matcher-v2 -cmd=layer3-parallel-groups")
+	fmt.Println()
+	fmt.Println("  Run parallel Layer 3b (individual document fuzzy matching):")
+	fmt.Println("    ./matcher-v2 -cmd=layer3-parallel-docs")
+	fmt.Println()
+	fmt.Println("  Run complete parallel Layer 3 (both 3a and 3b):")
+	fmt.Println("    ./matcher-v2 -cmd=layer3-parallel-combined")
 	fmt.Println()
 	fmt.Println("  Standardize and clean source addresses:")
 	fmt.Println("    ./matcher-v2 -cmd=standardize-addresses")
