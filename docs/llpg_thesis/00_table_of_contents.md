@@ -159,6 +159,20 @@
 
 ---
 
+## Part VI: Future Development
+
+### [Chapter 13: Data Quality Improvement Analysis](13_data_quality_improvement_analysis.md)
+- 13.1 Executive Summary
+- 13.2 Current Cleansing Methods Inventory
+- 13.3 Identified Gaps and Limitations
+- 13.4 IDOX Planning Data Opportunity
+- 13.5 Proposed Enhancements
+- 13.6 Implementation Priority Matrix
+- 13.7 Expected Outcomes
+- 13.8 Chapter Summary
+
+---
+
 ## Quick Reference
 
 | Topic | Chapter |
