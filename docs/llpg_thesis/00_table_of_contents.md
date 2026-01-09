@@ -156,6 +156,11 @@
 - Appendix F: Abbreviation Expansion Rules
 - Appendix G: Hampshire Locality Tokens
 - Appendix H: Regular Expression Patterns
+- Appendix I: Spelling Correction Techniques for UK Addresses
+- Appendix J: UK Address Standards Reference
+- Appendix K: External Data Sources for Address Enrichment
+- Appendix L: Active Learning for Address Matching
+- Appendix M: Multi-Source Address Resolution Best Practices
 
 ---
 
@@ -190,6 +195,11 @@
 | Match statistics | [Chapter 11](11_results_and_statistics.md) |
 | CLI commands | [Appendix C](12_appendices.md#appendix-c-cli-command-reference) |
 | Glossary | [Appendix D](12_appendices.md#appendix-d-glossary-of-terms) |
+| Spelling correction | [Appendix I](12_appendices.md#appendix-i-spelling-correction-techniques-for-uk-addresses) |
+| UK address standards | [Appendix J](12_appendices.md#appendix-j-uk-address-standards-reference) |
+| External data sources | [Appendix K](12_appendices.md#appendix-k-external-data-sources-for-address-enrichment) |
+| Active learning | [Appendix L](12_appendices.md#appendix-l-active-learning-for-address-matching) |
+| Multi-source resolution | [Appendix M](12_appendices.md#appendix-m-multi-source-address-resolution-best-practices) |
 
 ---
 
@@ -198,9 +208,10 @@
 | Attribute | Value |
 |-----------|-------|
 | System | EHDC LLPG Address Matching System |
-| Version | 2.0 |
+| Version | 2.1 |
 | Language | British English |
-| Total Chapters | 12 |
+| Total Chapters | 13 |
+| Total Appendices | 13 (A-M) |
 | Total Source Records | 129,701 |
 | Overall Match Rate | 57.22% |
 | Auto-Accept Precision | 99.1% |
