@@ -26,6 +26,7 @@ import (
 	"github.com/ehdc-llpg/internal/llpg"
 	"github.com/ehdc-llpg/internal/match"
 	"github.com/ehdc-llpg/internal/phonetics"
+	"github.com/ehdc-llpg/internal/symspell"
 	"github.com/ehdc-llpg/internal/validation"
 	"github.com/ehdc-llpg/internal/vector"
 )
@@ -82,6 +83,19 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
+	// Initialize SymSpell spelling correction if enabled
+	if symspell.LoadConfigFromEnv().Enabled {
+		fmt.Println("Initializing SymSpell spelling correction...")
+		startTime := time.Now()
+		if err := symspell.InitGlobalCorrector(db); err != nil {
+			log.Printf("Warning: Failed to initialize SymSpell: %v", err)
+		} else if corrector := symspell.GetCorrector(); corrector != nil {
+			stats := corrector.Stats()
+			fmt.Printf("SymSpell initialized: %d terms, %d deletes (%.1fs)\n\n",
+				stats.TermCount, stats.DeleteCount, time.Since(startTime).Seconds())
+		}
+	}
 
 	// Execute command
 	switch *command {
