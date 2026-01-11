@@ -63,12 +63,12 @@ func (b *DictionaryBuilder) extractTowns() ([]DictionaryEntry, error) {
 	// Extract the last comma-separated component as town
 	query := `
 		SELECT
-			UPPER(TRIM(SPLIT_PART(addr_can, ',', ARRAY_LENGTH(STRING_TO_ARRAY(addr_can, ','), 1)))) as term,
+			UPPER(TRIM(SPLIT_PART(address_canonical, ',', ARRAY_LENGTH(STRING_TO_ARRAY(address_canonical, ','), 1)))) as term,
 			COUNT(*) as freq
 		FROM dim_address
-		WHERE addr_can IS NOT NULL
-			AND addr_can != ''
-			AND LENGTH(TRIM(SPLIT_PART(addr_can, ',', ARRAY_LENGTH(STRING_TO_ARRAY(addr_can, ','), 1)))) >= 3
+		WHERE address_canonical IS NOT NULL
+			AND address_canonical != ''
+			AND LENGTH(TRIM(SPLIT_PART(address_canonical, ',', ARRAY_LENGTH(STRING_TO_ARRAY(address_canonical, ','), 1)))) >= 3
 		GROUP BY 1
 		HAVING COUNT(*) >= $1
 		ORDER BY freq DESC
@@ -100,9 +100,9 @@ func (b *DictionaryBuilder) extractTowns() ([]DictionaryEntry, error) {
 func (b *DictionaryBuilder) extractAddressTokens() ([]DictionaryEntry, error) {
 	// Get all canonical addresses
 	query := `
-		SELECT addr_can
+		SELECT address_canonical
 		FROM dim_address
-		WHERE addr_can IS NOT NULL AND addr_can != ''
+		WHERE address_canonical IS NOT NULL AND address_canonical != ''
 	`
 
 	rows, err := b.db.Query(query)
