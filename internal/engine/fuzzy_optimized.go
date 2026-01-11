@@ -206,12 +206,14 @@ func (ofm *OptimizedFuzzyMatcher) findOptimizedCandidates(doc SourceDocument, mi
 	// Use prepared statement for better performance
 	rows, err := ofm.db.Query(`
 		WITH candidates AS (
-			SELECT d.uprn, d.locaddress, d.addr_can, d.easting, d.northing, 
-				   d.usrn, d.blpu_class, d.status,
-				   similarity($1, d.addr_can) as trgm_score
+			SELECT d.uprn, d.full_address, d.address_canonical,
+			       COALESCE(l.easting, 0), COALESCE(l.northing, 0),
+			       d.usrn, d.blpu_class, d.status_code,
+			       similarity($1, d.address_canonical) as trgm_score
 			FROM dim_address d
-			WHERE d.addr_can % $1
-			  AND similarity($1, d.addr_can) >= $2
+			LEFT JOIN dim_location l ON d.location_id = l.location_id
+			WHERE d.address_canonical % $1
+			  AND similarity($1, d.address_canonical) >= $2
 			ORDER BY trgm_score DESC
 			LIMIT 20
 		)

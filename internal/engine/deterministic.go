@@ -118,15 +118,18 @@ func (dm *DeterministicMatcher) RunDeterministicMatching(runID int64, batchSize 
 // ValidateLegacyUPRN checks if a legacy UPRN exists in the LLPG
 func (dm *DeterministicMatcher) ValidateLegacyUPRN(uprn string) (*AddressCandidate, bool) {
 	var candidate AddressCandidate
-	
+
 	err := dm.db.QueryRow(`
-		SELECT uprn, locaddress, addr_can, easting, northing, usrn, blpu_class, status
-		FROM dim_address
-		WHERE uprn = $1
+		SELECT a.uprn, a.full_address, a.address_canonical,
+		       COALESCE(l.easting, 0), COALESCE(l.northing, 0),
+		       a.usrn, a.blpu_class, a.status_code
+		FROM dim_address a
+		LEFT JOIN dim_location l ON a.location_id = l.location_id
+		WHERE a.uprn = $1
 	`, uprn).Scan(&candidate.UPRN, &candidate.LocAddress, &candidate.AddrCan,
-		&candidate.Easting, &candidate.Northing, &candidate.USRN, 
+		&candidate.Easting, &candidate.Northing, &candidate.USRN,
 		&candidate.BLPUClass, &candidate.Status)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, false
@@ -135,27 +138,30 @@ func (dm *DeterministicMatcher) ValidateLegacyUPRN(uprn string) (*AddressCandida
 		fmt.Printf("Error validating UPRN %s: %v\n", uprn, err)
 		return nil, false
 	}
-	
+
 	return &candidate, true
 }
 
 // FindExactCanonicalMatches finds addresses with exactly matching canonical form
 func (dm *DeterministicMatcher) FindExactCanonicalMatches(addrCan string) []*AddressCandidate {
 	rows, err := dm.db.Query(`
-		SELECT uprn, locaddress, addr_can, easting, northing, usrn, blpu_class, status
-		FROM dim_address
-		WHERE addr_can = $1
-		ORDER BY uprn
+		SELECT a.uprn, a.full_address, a.address_canonical,
+		       COALESCE(l.easting, 0), COALESCE(l.northing, 0),
+		       a.usrn, a.blpu_class, a.status_code
+		FROM dim_address a
+		LEFT JOIN dim_location l ON a.location_id = l.location_id
+		WHERE a.address_canonical = $1
+		ORDER BY a.uprn
 	`, addrCan)
-	
+
 	if err != nil {
 		fmt.Printf("Error finding exact canonical matches for '%s': %v\n", addrCan, err)
 		return nil
 	}
 	defer rows.Close()
-	
+
 	var candidates []*AddressCandidate
-	
+
 	for rows.Next() {
 		var candidate AddressCandidate
 		err := rows.Scan(&candidate.UPRN, &candidate.LocAddress, &candidate.AddrCan,
@@ -167,7 +173,7 @@ func (dm *DeterministicMatcher) FindExactCanonicalMatches(addrCan string) []*Add
 		}
 		candidates = append(candidates, &candidate)
 	}
-	
+
 	return candidates
 }
 
