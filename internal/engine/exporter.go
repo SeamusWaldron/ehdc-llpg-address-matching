@@ -167,13 +167,14 @@ func (e *Exporter) getEnhancedDocuments(sourceType string) ([]*EnhancedSourceDoc
 			
 			-- Match data
 			m.uprn, m.method, m.score, m.confidence, m.accepted_by, m.accepted_at,
-			
+
 			-- LLPG data
-			d.locaddress, d.easting as llpg_easting, d.northing as llpg_northing
-			
+			d.full_address, COALESCE(l.easting, 0) as llpg_easting, COALESCE(l.northing, 0) as llpg_northing
+
 		FROM src_document s
 		LEFT JOIN match_accepted m ON m.src_id = s.src_id
 		LEFT JOIN dim_address d ON d.uprn = m.uprn
+		LEFT JOIN dim_location l ON d.location_id = l.location_id
 		WHERE s.source_type = $1
 		ORDER BY s.src_id
 	`

@@ -280,10 +280,10 @@ func (rm *RuleMatcher) tryRule(doc SourceDocument, sourceAddr string, rule Addre
 
 	// Search for matches using the transformed address
 	rows, err := rm.db.Query(`
-		SELECT d.uprn, d.locaddress, d.addr_can, similarity($1, d.addr_can) as sim
+		SELECT d.uprn, d.full_address, d.address_canonical, similarity($1, d.address_canonical) as sim
 		FROM dim_address d
-		WHERE d.addr_can % $1
-		  AND similarity($1, d.addr_can) >= 0.70
+		WHERE d.address_canonical % $1
+		  AND similarity($1, d.address_canonical) >= 0.70
 		ORDER BY sim DESC
 		LIMIT 5
 	`, transformedAddr)

@@ -156,10 +156,10 @@ func (pm *PostcodeMatcher) findPostcodeMatches(doc SourceDocument) ([]*PostcodeC
 
 	// Query for addresses with same postcode
 	rows, err := pm.db.Query(`
-		SELECT d.uprn, d.locaddress, d.addr_can
+		SELECT d.uprn, d.full_address, d.address_canonical
 		FROM dim_address d
-		WHERE d.locaddress LIKE $1
-		   OR d.locaddress LIKE $2
+		WHERE d.full_address LIKE $1
+		   OR d.full_address LIKE $2
 		ORDER BY d.uprn
 	`, "%"+postcode, "%"+strings.ReplaceAll(postcode, " ", ""))
 
@@ -361,7 +361,7 @@ func (pm *PostcodeMatcher) AnalyzePostcodeQuality() error {
 		FROM postcode_pairs pp
 		WHERE EXISTS (
 			SELECT 1 FROM dim_address d
-			WHERE d.locaddress LIKE '%' || pp.postcode_text || '%'
+			WHERE d.full_address LIKE '%' || pp.postcode_text || '%'
 		)
 	`).Scan(&matchPotential)
 

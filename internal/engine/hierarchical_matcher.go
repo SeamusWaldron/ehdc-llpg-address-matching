@@ -54,10 +54,10 @@ func (hm *HierarchicalMatcher) RunHierarchicalMatching(runID int64, batchSize in
 			Description: "Postcode + House Number",
 			MinScore:    0.90,
 			Query: `
-				SELECT d.uprn, d.locaddress, d.addr_can, 0.95 as score
+				SELECT d.uprn, d.full_address, d.address_canonical, 0.95 as score
 				FROM dim_address d
-				WHERE d.locaddress LIKE '%' || $2 || '%'
-				  AND d.addr_can LIKE $1 || '%'
+				WHERE d.full_address LIKE '%' || $2 || '%'
+				  AND d.address_canonical LIKE $1 || '%'
 			`,
 		},
 		{
@@ -65,11 +65,11 @@ func (hm *HierarchicalMatcher) RunHierarchicalMatching(runID int64, batchSize in
 			Description: "Street + House Number + Locality",
 			MinScore:    0.85,
 			Query: `
-				SELECT d.uprn, d.locaddress, d.addr_can, 0.90 as score
+				SELECT d.uprn, d.full_address, d.address_canonical, 0.90 as score
 				FROM dim_address d
-				WHERE ($1 = '' OR d.addr_can LIKE $1 || '%')
-				  AND ($2 = '' OR d.addr_can LIKE '%' || $2 || '%')
-				  AND ($3 = '' OR d.addr_can LIKE '%' || $3 || '%')
+				WHERE ($1 = '' OR d.address_canonical LIKE $1 || '%')
+				  AND ($2 = '' OR d.address_canonical LIKE '%' || $2 || '%')
+				  AND ($3 = '' OR d.address_canonical LIKE '%' || $3 || '%')
 			`,
 		},
 		{
@@ -77,10 +77,10 @@ func (hm *HierarchicalMatcher) RunHierarchicalMatching(runID int64, batchSize in
 			Description: "Street Name + Locality",
 			MinScore:    0.75,
 			Query: `
-				SELECT d.uprn, d.locaddress, d.addr_can, 0.80 as score
+				SELECT d.uprn, d.full_address, d.address_canonical, 0.80 as score
 				FROM dim_address d
-				WHERE ($1 = '' OR d.addr_can LIKE '%' || $1 || '%')
-				  AND ($2 = '' OR d.addr_can LIKE '%' || $2 || '%')
+				WHERE ($1 = '' OR d.address_canonical LIKE '%' || $1 || '%')
+				  AND ($2 = '' OR d.address_canonical LIKE '%' || $2 || '%')
 			`,
 		},
 		{
@@ -88,10 +88,10 @@ func (hm *HierarchicalMatcher) RunHierarchicalMatching(runID int64, batchSize in
 			Description: "Partial Street with Phonetic",
 			MinScore:    0.70,
 			Query: `
-				SELECT d.uprn, d.locaddress, d.addr_can, 0.75 as score
+				SELECT d.uprn, d.full_address, d.address_canonical, 0.75 as score
 				FROM dim_address d
-				WHERE ($1 = '' OR soundex(d.addr_can) = soundex($1))
-				   OR ($1 = '' OR d.addr_can LIKE '%' || substring($1 from 1 for 4) || '%')
+				WHERE ($1 = '' OR soundex(d.address_canonical) = soundex($1))
+				   OR ($1 = '' OR d.address_canonical LIKE '%' || substring($1 from 1 for 4) || '%')
 			`,
 		},
 		{
@@ -99,9 +99,9 @@ func (hm *HierarchicalMatcher) RunHierarchicalMatching(runID int64, batchSize in
 			Description: "Locality + Nearby Streets",
 			MinScore:    0.65,
 			Query: `
-				SELECT d.uprn, d.locaddress, d.addr_can, 0.70 as score
+				SELECT d.uprn, d.full_address, d.address_canonical, 0.70 as score
 				FROM dim_address d
-				WHERE d.addr_can LIKE '%' || $1 || '%'
+				WHERE d.address_canonical LIKE '%' || $1 || '%'
 			`,
 		},
 	}

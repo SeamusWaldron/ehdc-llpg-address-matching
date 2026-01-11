@@ -151,8 +151,8 @@ func (ri *ReviewInterface) getItemsNeedingReview(limit int) ([]*ReviewItem, erro
 // getCandidatesForReview gets all candidates for a source document
 func (ri *ReviewInterface) getCandidatesForReview(srcID int64) ([]*ReviewCandidate, error) {
 	rows, err := ri.db.Query(`
-		SELECT mr.candidate_uprn, mr.method, mr.score, mr.confidence, 
-			   mr.tie_rank, mr.features, d.locaddress
+		SELECT mr.candidate_uprn, mr.method, mr.score, mr.confidence,
+			   mr.tie_rank, mr.features, d.full_address
 		FROM match_result mr
 		LEFT JOIN dim_address d ON d.uprn = mr.candidate_uprn
 		WHERE mr.src_id = $1 AND mr.decision = 'needs_review'

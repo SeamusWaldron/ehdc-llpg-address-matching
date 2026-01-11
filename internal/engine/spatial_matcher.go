@@ -169,24 +169,26 @@ func (sm *SpatialMatcher) findSpatialCandidates(doc SourceDocument, maxDistance 
 
 	// Use PostGIS for efficient spatial query
 	rows, err := sm.db.Query(`
-		SELECT 
-			d.uprn, 
-			d.locaddress, 
-			d.addr_can,
-			d.easting,
-			d.northing,
+		SELECT
+			d.uprn,
+			d.full_address,
+			d.address_canonical,
+			COALESCE(l.easting, 0),
+			COALESCE(l.northing, 0),
 			ST_Distance(
 				ST_SetSRID(ST_MakePoint($1, $2), 27700),
-				ST_SetSRID(ST_MakePoint(d.easting, d.northing), 27700)
+				ST_SetSRID(ST_MakePoint(l.easting, l.northing), 27700)
 			) as distance_meters,
-			CASE 
-				WHEN $3 != '' THEN similarity($3, d.addr_can)
+			CASE
+				WHEN $3 != '' THEN similarity($3, d.address_canonical)
 				ELSE 0.0
 			END as address_similarity
 		FROM dim_address d
-		WHERE ST_DWithin(
+		JOIN dim_location l ON d.location_id = l.location_id
+		WHERE l.easting IS NOT NULL AND l.northing IS NOT NULL
+		  AND ST_DWithin(
 			ST_SetSRID(ST_MakePoint($1, $2), 27700),
-			ST_SetSRID(ST_MakePoint(d.easting, d.northing), 27700),
+			ST_SetSRID(ST_MakePoint(l.easting, l.northing), 27700),
 			$4
 		)
 		ORDER BY distance_meters ASC, address_similarity DESC
