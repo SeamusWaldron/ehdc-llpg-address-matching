@@ -154,9 +154,10 @@ func (g *Generators) lookupUPRN(localDebug bool, uprn string) (Candidate, bool) 
 
 	var cand Candidate
 	err := g.DB.QueryRow(`
-		SELECT uprn, locaddress, easting, northing
-		FROM dim_address
-		WHERE uprn = $1
+		SELECT a.uprn, a.full_address, COALESCE(l.easting, 0), COALESCE(l.northing, 0)
+		FROM dim_address a
+		LEFT JOIN dim_location l ON a.location_id = l.location_id
+		WHERE a.uprn = $1
 	`, trimmedUPRN).Scan(&cand.UPRN, &cand.LocAddress, &cand.Easting, &cand.Northing)
 
 	if err != nil {
@@ -176,11 +177,12 @@ func (g *Generators) exactCanonicalMatch(localDebug bool, canonical string) []Ca
 	}
 
 	rows, err := g.DB.Query(`
-		SELECT uprn, locaddress, easting, northing
-		FROM dim_address
-		WHERE addr_can = $1
+		SELECT a.uprn, a.full_address, COALESCE(l.easting, 0), COALESCE(l.northing, 0)
+		FROM dim_address a
+		LEFT JOIN dim_location l ON a.location_id = l.location_id
+		WHERE a.address_canonical = $1
 	`, canonical)
-	
+
 	if err != nil {
 		debug.DebugOutput(localDebug, "Exact canonical match failed: %v", err)
 		return []Candidate{}
@@ -210,10 +212,12 @@ func (g *Generators) trigramMatch(localDebug bool, canonical string, tokens []st
 	}
 
 	rows, err := g.DB.Query(`
-		SELECT uprn, locaddress, easting, northing, similarity($1, addr_can) AS trgm_score
-		FROM dim_address
-		WHERE addr_can % $1
-		  AND similarity($1, addr_can) >= $2
+		SELECT a.uprn, a.full_address, COALESCE(l.easting, 0), COALESCE(l.northing, 0),
+		       similarity($1, a.address_canonical) AS trgm_score
+		FROM dim_address a
+		LEFT JOIN dim_location l ON a.location_id = l.location_id
+		WHERE a.address_canonical % $1
+		  AND similarity($1, a.address_canonical) >= $2
 		ORDER BY trgm_score DESC
 		LIMIT $3
 	`, canonical, threshold, limit)
@@ -267,9 +271,10 @@ func (g *Generators) vectorMatch(localDebug bool, canonical string, limit int) (
 		// Look up full address details from PostgreSQL
 		var cand Candidate
 		err := g.DB.QueryRow(`
-			SELECT uprn, locaddress, easting, northing
-			FROM dim_address
-			WHERE uprn = $1
+			SELECT a.uprn, a.full_address, COALESCE(l.easting, 0), COALESCE(l.northing, 0)
+			FROM dim_address a
+			LEFT JOIN dim_location l ON a.location_id = l.location_id
+			WHERE a.uprn = $1
 		`, vr.UPRN).Scan(&cand.UPRN, &cand.LocAddress, &cand.Easting, &cand.Northing)
 
 		if err != nil {
