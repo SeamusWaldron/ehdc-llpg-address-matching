@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	"github.com/ehdc-llpg/internal/debug"
+	"github.com/ehdc-llpg/internal/symspell"
 )
 
 // ParseFloat converts string to float64, handling UK number formats
@@ -161,6 +162,20 @@ func CanonicalAddressDebug(localDebug bool, raw string) (addrCan, postcode strin
 	rules := NewAbbrevRules()
 	s = rules.Expand(s)
 	debug.DebugOutput(localDebug, "After abbreviation expansion: %s", s)
+
+	// Apply SymSpell spelling correction if enabled
+	if symspell.IsEnabled() {
+		if corrector := symspell.GetCorrector(); corrector != nil {
+			corrected, corrections := corrector.CorrectAddress(s)
+			if len(corrections) > 0 {
+				s = corrected
+				debug.DebugOutput(localDebug, "After SymSpell correction: %s", s)
+				for _, c := range corrections {
+					debug.DebugOutput(localDebug, "  Corrected: %s -> %s (distance=%d)", c.Original, c.Corrected, c.Distance)
+				}
+			}
+		}
+	}
 
 	// Handle special UK descriptors
 	s = handleDescriptors(s)
